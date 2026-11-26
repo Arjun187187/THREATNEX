@@ -7,6 +7,16 @@ export default defineConfig({
     port: 5173,
     host: true,
   },
+  build: {
+    sourcemap: false, // Ensure source maps are disabled in production builds
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom', 'axios', '@tanstack/react-query'],
+        },
+      },
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom',

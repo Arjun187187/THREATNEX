@@ -1,11 +1,12 @@
 """FastAPI dependency injection for database, authentication, and RBAC."""
 from typing import List
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
 from app.core.security import decode_token
+from app.core.ratelimit import is_token_revoked
 from app.modules.auth.models import User
 
 security = HTTPBearer()
@@ -17,6 +18,15 @@ async def get_current_user(
 ) -> User:
     """Validates the Bearer access token and fetches the current active user."""
     token = credentials.credentials
+
+    # Check token revocation
+    if is_token_revoked(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     payload = decode_token(token)
     if not payload or payload.get("type") != "access":
         raise HTTPException(

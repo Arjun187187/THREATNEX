@@ -54,6 +54,9 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     """Authenticate with username/email and password to receive JWT tokens."""
+    from app.core.ratelimit import check_rate_limit
+    check_rate_limit(request, max_requests=10, window_seconds=60) # 10 login attempts / min brute force protection
+
     user, tokens = await authenticate_user(db, credentials)
     await record_audit_log(
         db=db,
@@ -98,7 +101,13 @@ async def logout(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Client-side token disposal endpoint with audit log."""
+    """Client-side token disposal endpoint with revocation and audit log."""
+    from app.core.ratelimit import revoke_token
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        revoke_token(token)
+
     await record_audit_log(
         db=db,
         action="USER_LOGOUT",
@@ -107,6 +116,6 @@ async def logout(
         user_id=current_user.id,
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
-        details="User logged out",
+        details="User logged out and token revoked",
     )
-    return {"message": "Successfully logged out"}
+    return {"message": "Successfully logged out and session revoked"}

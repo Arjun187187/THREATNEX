@@ -60,10 +60,20 @@ async def get_all_investigations(
 async def get_single_investigation(
     investigation_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Retrieve details of a single investigation case."""
-    return await get_investigation_by_id(db, investigation_id)
+    """Retrieve details of a single investigation case with object-level authorization."""
+    inv = await get_investigation_by_id(db, investigation_id)
+    user_roles = [r.name for r in current_user.roles]
+    # Enforce object authorization: Admins can view any case; Analysts can view unassigned or assigned cases or cases they own
+    if "Admin" not in user_roles and inv.owner_id and inv.owner_id != current_user.id:
+        if inv.assigned_to and inv.assigned_to != current_user.username:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: You do not have permission to access this private investigation case."
+            )
+    return inv
 
 
 @router.patch("/{investigation_id}", response_model=InvestigationResponse)
@@ -74,7 +84,17 @@ async def patch_investigation(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update title, status, priority, or attached IOCs of an investigation."""
+    """Update title, status, priority, or attached IOCs with IDOR authorization."""
+    inv = await get_investigation_by_id(db, investigation_id)
+    user_roles = [r.name for r in current_user.roles]
+    if "Admin" not in user_roles and inv.owner_id and inv.owner_id != current_user.id:
+        if inv.assigned_to and inv.assigned_to != current_user.username:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Unauthorized attempt to modify an investigation case."
+            )
+
     inv = await update_investigation(db, investigation_id, payload)
     await record_audit_log(
         db=db,

@@ -13,9 +13,9 @@ class RoleSchema(BaseModel):
 
 class UserRegister(BaseModel):
     email: EmailStr
-    username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=8, max_length=128)
-    full_name: Optional[str] = None
+    username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$")
+    password: str = Field(..., min_length=12, max_length=128)
+    full_name: Optional[str] = Field(None, max_length=100)
 
 
 class UserLogin(BaseModel):
