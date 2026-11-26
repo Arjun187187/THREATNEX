@@ -1,26 +1,49 @@
-"""FastAPI dependency injection for database, authentication, and RBAC."""
-from typing import List
+"""FastAPI dependency injection for database, authentication, and RBAC.
+Supports dual authentication: HttpOnly Secure Cookies and Authorization Bearer header.
+Enforces distributed token revocation checks.
+"""
+from typing import List, Optional
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
 from app.core.security import decode_token
-from app.core.ratelimit import is_token_revoked
+from app.core.token_revocation import is_token_revoked
 from app.modules.auth.models import User
 
-security = HTTPBearer()
+# Optional bearer for API clients
+optional_security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
     db: AsyncSession = Depends(get_db)
 ) -> User:
-    """Validates the Bearer access token and fetches the current active user."""
-    token = credentials.credentials
+    """
+    Validates token from either:
+    1. HttpOnly 'threatnex_access_token' cookie (preferred browser authentication)
+    2. 'Authorization: Bearer <token>' header (API clients / tools)
+    """
+    token: Optional[str] = None
 
-    # Check token revocation
-    if is_token_revoked(token):
+    # Check cookie first
+    cookie_token = request.cookies.get("threatnex_access_token")
+    if cookie_token:
+        token = cookie_token
+    elif credentials and credentials.credentials:
+        token = credentials.credentials
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Check distributed token revocation blacklist (Redis-backed)
+    if await is_token_revoked(token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has been revoked",

@@ -1,5 +1,5 @@
 services:
-  # PostgreSQL 16 Database (Isolated Internal Network, No Public Port Mapping)
+  # PostgreSQL 16 Database (Isolated Internal Network, Non-Root)
   postgres:
     image: postgres:16-alpine
     container_name: threatnex_postgres
@@ -25,11 +25,12 @@ services:
           cpus: '1.0'
           memory: 1024M
 
-  # Redis (Isolated Internal Network, No Public Port Mapping)
+  # Redis (Isolated Internal Network, Persistent Volume)
   redis:
     image: redis:7-alpine
     container_name: threatnex_redis
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
     expose:
       - "6379"
     volumes:
@@ -54,6 +55,13 @@ services:
       dockerfile: Dockerfile
     container_name: threatnex_backend
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=64M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       ENVIRONMENT: production
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-threatnex}:${POSTGRES_PASSWORD:-threatnex_secure_password}@postgres:5432/${POSTGRES_DB:-threatnex_db}
@@ -83,6 +91,15 @@ services:
       dockerfile: Dockerfile
     container_name: threatnex_frontend
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=32M
+      - /var/run:mode=0755,size=16M
+      - /var/cache/nginx:mode=0755,size=64M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "127.0.0.1:5173:8080"
     networks:

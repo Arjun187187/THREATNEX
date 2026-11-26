@@ -1,7 +1,7 @@
 """Investigation business logic."""
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from fastapi import HTTPException, status
 from app.modules.investigations.models import Investigation, InvestigationStatus
 from app.modules.investigations.schemas import InvestigationCreate, InvestigationUpdate
@@ -40,14 +40,33 @@ async def create_investigation(
 
 async def list_investigations(
     db: AsyncSession,
+    current_user_id: str,
+    user_roles: List[str],
+    current_username: str,
     status_filter: Optional[InvestigationStatus] = None,
     limit: int = 50,
     offset: int = 0
 ) -> List[Investigation]:
-    """Retrieves paginated investigations list."""
+    """
+    Retrieves paginated investigations with strict database-level authorization.
+    Admins can view all investigations.
+    Analysts can ONLY view investigations they own, are assigned to, or are unassigned.
+    """
     stmt = select(Investigation).order_by(Investigation.created_at.desc())
+
+    # Strict multi-tenant / ownership filtering at SQL query level
+    if "Admin" not in user_roles:
+        stmt = stmt.where(
+            or_(
+                Investigation.owner_id == current_user_id,
+                Investigation.assigned_to == current_username,
+                Investigation.assigned_to.is_(None),
+            )
+        )
+
     if status_filter:
         stmt = stmt.where(Investigation.status == status_filter)
+
     stmt = stmt.limit(limit).offset(offset)
     result = await db.execute(stmt)
     return list(result.scalars().all())

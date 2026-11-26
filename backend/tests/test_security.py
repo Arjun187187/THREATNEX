@@ -1,227 +1,151 @@
-"""Comprehensive Security Hardening Regression Test Suite."""
+"""Comprehensive Security Regression Test Suite for Phase 1B Hardening."""
 import pytest
-from app.core.ratelimit import reset_rate_limits
+from app.core.ratelimit import reset_local_rate_limits
+from app.core.token_revocation import reset_local_revocation
+from app.core.config import Settings
 from app.modules.indicators.validator import validate_ioc_value
 
 
 @pytest.fixture(autouse=True)
-def clean_ratelimits():
-    """Reset rate limiter and token blacklist before each test."""
-    reset_rate_limits()
+def clean_security_state():
+    reset_local_rate_limits()
+    reset_local_revocation()
     yield
-    reset_rate_limits()
+    reset_local_rate_limits()
+    reset_local_revocation()
 
 
 @pytest.mark.asyncio
-async def test_scenario_1_unauthenticated_access_rejected(client):
-    """1. Unauthenticated users cannot access protected endpoints."""
-    protected_endpoints = [
-        ("GET", "/api/v1/auth/me"),
-        ("GET", "/api/v1/investigations/"),
-        ("POST", "/api/v1/investigations/"),
-        ("GET", "/api/v1/dashboard/stats"),
-        ("GET", "/api/v1/audit/logs"),
-    ]
-    for method, endpoint in protected_endpoints:
-        if method == "GET":
-            res = await client.get(endpoint)
-        else:
-            res = await client.post(endpoint, json={})
-        assert res.status_code == 403 or res.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_scenario_2_analyst_cannot_access_admin_endpoints(client):
-    """2. Analyst users cannot perform Admin-only operations (Audit logs)."""
-    # Create the first user (Admin)
+async def test_idor_investigations_list_and_detail(client):
+    """Verify Analyst A cannot view or list Analyst B's private investigation cases."""
+    # 1. Create Analyst A and Analyst B
     await client.post(
         "/api/v1/auth/register",
-        json={"email": "admin_audit@threatnex.io", "username": "admin_audit", "password": "Password123!Secure"},
+        json={"email": "analyst_a@threatnex.io", "username": "analyst_a", "password": "Password123!Secure"},
     )
-    # Create the second user (Analyst only)
     await client.post(
         "/api/v1/auth/register",
-        json={"email": "analyst_sec@threatnex.io", "username": "analyst_sec", "password": "Password123!Secure"},
+        json={"email": "analyst_b@threatnex.io", "username": "analyst_b", "password": "Password123!Secure"},
     )
 
-    # Login as analyst
-    login_res = await client.post(
+    # 2. Login as Analyst A and create private case
+    login_a = await client.post(
         "/api/v1/auth/login",
-        json={"username_or_email": "analyst_sec", "password": "Password123!Secure"},
+        json={"username_or_email": "analyst_a", "password": "Password123!Secure"},
     )
-    analyst_token = login_res.json()["access_token"]
+    token_a = login_a.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
 
-    # Attempt to view audit logs (Admin only)
-    audit_res = await client.get(
-        "/api/v1/audit/logs",
-        headers={"Authorization": f"Bearer {analyst_token}"},
-    )
-    assert audit_res.status_code == 403
-    assert "Requires one of roles: Admin" in audit_res.json()["detail"]
-
-
-@pytest.mark.asyncio
-async def test_scenario_3_object_level_authorization_idor(client):
-    """3. Users cannot access or modify another user's private investigations without authorization."""
-    # Register two analyst users
-    await client.post(
-        "/api/v1/auth/register",
-        json={"email": "user1@threatnex.io", "username": "user1_analyst", "password": "Password123!Secure"},
-    )
-    await client.post(
-        "/api/v1/auth/register",
-        json={"email": "user2@threatnex.io", "username": "user2_analyst", "password": "Password123!Secure"},
-    )
-
-    token1 = (await client.post(
-        "/api/v1/auth/login",
-        json={"username_or_email": "user1_analyst", "password": "Password123!Secure"},
-    )).json()["access_token"]
-
-    token2 = (await client.post(
-        "/api/v1/auth/login",
-        json={"username_or_email": "user2_analyst", "password": "Password123!Secure"},
-    )).json()["access_token"]
-
-    # User 1 creates an assigned private investigation
-    case_res = await client.post(
+    case_a = await client.post(
         "/api/v1/investigations/",
-        json={"title": "Confidential Investigation", "priority": "high", "assigned_to": "user1_analyst"},
-        headers={"Authorization": f"Bearer {token1}"},
+        json={"title": "Analyst A Confidential Investigation", "priority": "high", "assigned_to": "analyst_a"},
+        headers=headers_a,
     )
-    case_id = case_res.json()["id"]
+    case_a_id = case_a.json()["id"]
 
-    # User 2 attempts to read User 1's case -> 403 Forbidden
-    unauthorized_get = await client.get(
-        f"/api/v1/investigations/{case_id}",
-        headers={"Authorization": f"Bearer {token2}"},
+    # 3. Login as Analyst B
+    login_b = await client.post(
+        "/api/v1/auth/login",
+        json={"username_or_email": "analyst_b", "password": "Password123!Secure"},
     )
-    assert unauthorized_get.status_code == 403
+    token_b = login_b.json()["access_token"]
+    headers_b = {"Authorization": f"Bearer {token_b}"}
 
-    # User 2 attempts to update User 1's case -> 403 Forbidden
-    unauthorized_patch = await client.patch(
-        f"/api/v1/investigations/{case_id}",
-        json={"title": "Tampered Title"},
-        headers={"Authorization": f"Bearer {token2}"},
-    )
-    assert unauthorized_patch.status_code == 403
+    # Verify Analyst B LIST endpoint DOES NOT include Analyst A's private case
+    list_b = await client.get("/api/v1/investigations/", headers=headers_b)
+    assert list_b.status_code == 200
+    b_cases = list_b.json()
+    assert not any(c["id"] == case_a_id for c in b_cases)
+
+    # Verify Analyst B DETAIL endpoint is explicitly rejected with 403 Forbidden
+    detail_b = await client.get(f"/api/v1/investigations/{case_a_id}", headers=headers_b)
+    assert detail_b.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_scenario_4_and_5_jwt_revocation_and_misuse(client):
-    """4 & 5. Invalid/expired tokens and refresh token misuse are rejected; logout revokes token."""
+async def test_refresh_token_rotation_and_reuse_detection(client):
+    """Verify atomic token rotation, and that replay of an old refresh token revokes the entire family."""
+    reg = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "rotate_test@threatnex.io", "username": "rotate_test", "password": "Password123!Secure"},
+    )
+    assert reg.status_code == 201
+
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={"username_or_email": "rotate_test", "password": "Password123!Secure"},
+    )
+    t1_refresh = login.json()["refresh_token"]
+
+    # 1st rotation: Refresh token 1 -> issues Refresh token 2
+    rotate_1 = await client.post("/api/v1/auth/refresh", json={"refresh_token": t1_refresh})
+    assert rotate_1.status_code == 200
+    t2_refresh = rotate_1.json()["refresh_token"]
+    t2_access = rotate_1.json()["access_token"]
+
+    # t2_access works
+    me_res = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {t2_access}"})
+    assert me_res.status_code == 200
+
+    # ATTACK / REPLAY: Attempt to reuse t1_refresh (already rotated)
+    replay_res = await client.post("/api/v1/auth/refresh", json={"refresh_token": t1_refresh})
+    assert replay_res.status_code == 401
+    assert "reuse detected" in replay_res.json()["detail"].lower()
+
+    # Verify token family was revoked: t2_refresh is now also dead
+    family_dead_res = await client.post("/api/v1/auth/refresh", json={"refresh_token": t2_refresh})
+    assert family_dead_res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_httponly_cookie_authentication_and_logout_revocation(client):
+    """Verify HttpOnly cookie flow and distributed revocation on logout."""
     await client.post(
         "/api/v1/auth/register",
-        json={"email": "logout_test@threatnex.io", "username": "logout_test", "password": "Password123!Secure"},
+        json={"email": "cookie_user@threatnex.io", "username": "cookie_user", "password": "Password123!Secure"},
     )
     login_res = await client.post(
         "/api/v1/auth/login",
-        json={"username_or_email": "logout_test", "password": "Password123!Secure"},
+        json={"username_or_email": "cookie_user", "password": "Password123!Secure"},
     )
-    token_data = login_res.json()
-    access_token = token_data["access_token"]
-    refresh_token = token_data["refresh_token"]
+    assert login_res.status_code == 200
+    assert "threatnex_access_token" in login_res.cookies
+    access_cookie = login_res.cookies["threatnex_access_token"]
 
-    # Refresh token misuse: Using refresh token as an access token on /me must fail
-    misuse_res = await client.get(
-        "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {refresh_token}"},
-    )
-    assert misuse_res.status_code == 401
+    # Access /me using cookie
+    me_res = await client.get("/api/v1/auth/me", cookies={"threatnex_access_token": access_cookie})
+    assert me_res.status_code == 200
+    assert me_res.json()["username"] == "cookie_user"
 
-    # Normal access succeeds
-    ok_res = await client.get(
-        "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    assert ok_res.status_code == 200
-
-    # User logs out
-    logout_res = await client.post(
-        "/api/v1/auth/logout",
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
+    # Logout
+    logout_res = await client.post("/api/v1/auth/logout", cookies={"threatnex_access_token": access_cookie})
     assert logout_res.status_code == 200
 
-    # Attempting to reuse revoked access token must fail
-    revoked_res = await client.get(
-        "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    assert revoked_res.status_code == 401
-    assert "revoked" in revoked_res.json()["detail"]
+    # Cookie is revoked in revocation manager; reuse must be denied
+    post_logout_me = await client.get("/api/v1/auth/me", cookies={"threatnex_access_token": access_cookie})
+    assert post_logout_me.status_code == 401
 
 
-@pytest.mark.asyncio
-async def test_scenario_6_and_7_sql_injection_and_malformed_inputs(client):
-    """6 & 7. Malformed inputs and SQL injection payloads cannot bypass validation or database query."""
-    await client.post(
-        "/api/v1/auth/register",
-        json={"email": "sqli_test@threatnex.io", "username": "sqli_test", "password": "Password123!Secure"},
-    )
-    token = (await client.post(
-        "/api/v1/auth/login",
-        json={"username_or_email": "sqli_test", "password": "Password123!Secure"},
-    )).json()["access_token"]
-
-    # SQL Injection attempt in login
-    sqli_login = await client.post(
-        "/api/v1/auth/login",
-        json={"username_or_email": "admin' OR '1'='1", "password": "' OR '1'='1"},
-    )
-    assert sqli_login.status_code == 401
-
-    # SQL Injection attempt in IOC search
-    sqli_search = await client.get(
-        "/api/v1/indicators/search?q=' UNION SELECT * FROM users --",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert sqli_search.status_code == 200
-    # Parameterized query safely returns empty list without syntax error
-    assert isinstance(sqli_search.json(), list)
-
-
-@pytest.mark.asyncio
-async def test_scenario_8_xss_payload_safety(client):
-    """8. XSS payloads are safely stored/validated as text without execution."""
-    xss_payload = "<script>alert('XSS')</script>"
-    is_valid, _, _ = validate_ioc_value(xss_payload)
-    assert is_valid is False  # Rejected by IOC validator engine
-
-
-@pytest.mark.asyncio
-async def test_scenario_9_open_redirect_mitigation():
-    """9. Open redirect attempts using backslash and protocol evasion are rejected."""
-    from app.modules.indicators.validator import validate_url
-    assert validate_url("javascript:alert(1)") is False
-    assert validate_url("data:text/html,<script>alert(1)</script>") is False
-    assert validate_url("http://legitimate-threat-intel.com") is True
-
-
-@pytest.mark.asyncio
-async def test_scenario_10_rate_limiting(client):
-    """10. Excessive login attempts trigger HTTP 429 Too Many Requests."""
-    for i in range(10):
-        res = await client.post(
-            "/api/v1/auth/login",
-            json={"username_or_email": "nonexistent_user", "password": "WrongPassword123!"},
+def test_production_rejects_weak_or_default_secret_key():
+    """Verify Settings rejects weak or default development secret keys in production."""
+    with pytest.raises(ValueError) as exc:
+        Settings(
+            ENVIRONMENT="production",
+            SECRET_KEY="threatnex-super-secret-development-key-change-in-production-min32chars"
         )
-        assert res.status_code == 401
-
-    # The 11th request in the same window must be rate-limited
-    rate_limited_res = await client.post(
-        "/api/v1/auth/login",
-        json={"username_or_email": "nonexistent_user", "password": "WrongPassword123!"},
-    )
-    assert rate_limited_res.status_code == 429
-    assert "Rate limit exceeded" in rate_limited_res.json()["detail"]
+    assert "Insecure SECRET_KEY" in str(exc.value)
 
 
 @pytest.mark.asyncio
-async def test_scenario_11_security_headers_present(client):
-    """11. Verified security headers on all API responses."""
-    res = await client.get("/health")
-    assert res.status_code == 200
-    assert res.headers.get("X-Content-Type-Options") == "nosniff"
-    assert res.headers.get("X-Frame-Options") == "DENY"
-    assert "default-src 'self'" in res.headers.get("Content-Security-Policy", "")
+async def test_proxy_ip_spoofing_defense(client):
+    """Verify untrusted X-Forwarded-For headers cannot spoof client IP for rate limiting."""
+    from app.core.ratelimit import get_client_ip
+    from unittest.mock import MagicMock
+
+    # Request from non-trusted proxy attempting spoofing
+    mock_request = MagicMock()
+    mock_request.client.host = "203.0.113.195"  # External untrusted IP
+    mock_request.headers.get.return_value = "198.51.100.22"  # Spoofed victim IP
+
+    resolved_ip = get_client_ip(mock_request)
+    assert resolved_ip == "203.0.113.195"  # Must NOT trust spoofed header

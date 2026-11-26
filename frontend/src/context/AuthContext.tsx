@@ -5,7 +5,7 @@ import { apiClient } from '../api/client';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (token: string, refreshToken: string, user: User) => void;
+  login: (userData: User) => void;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
 }
@@ -18,25 +18,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('threatnex_access_token');
-      if (token) {
-        try {
-          const res = await apiClient.get<User>('/auth/me');
-          setUser(res.data);
-        } catch {
-          localStorage.removeItem('threatnex_access_token');
-          localStorage.removeItem('threatnex_refresh_token');
-          setUser(null);
-        }
+      try {
+        // Query /auth/me authenticated via HttpOnly cookie
+        const res = await apiClient.get<User>('/auth/me');
+        setUser(res.data);
+      } catch {
+        setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     initAuth();
   }, []);
 
-  const login = (token: string, refreshToken: string, userData: User) => {
-    localStorage.setItem('threatnex_access_token', token);
-    localStorage.setItem('threatnex_refresh_token', refreshToken);
+  const login = (userData: User) => {
     setUser(userData);
   };
 
@@ -46,8 +41,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {
       // Ignored
     } finally {
-      localStorage.removeItem('threatnex_access_token');
-      localStorage.removeItem('threatnex_refresh_token');
       setUser(null);
       window.location.href = '/login';
     }

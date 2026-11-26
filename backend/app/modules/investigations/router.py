@@ -50,10 +50,19 @@ async def get_all_investigations(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Retrieve all investigations with optional status filter."""
-    return await list_investigations(db, status_filter=status_filter, limit=limit, offset=offset)
+    """Retrieve investigations filtered by ownership/assignment for non-admin analysts."""
+    roles = [r.name for r in current_user.roles]
+    return await list_investigations(
+        db,
+        current_user_id=current_user.id,
+        user_roles=roles,
+        current_username=current_user.username,
+        status_filter=status_filter,
+        limit=limit,
+        offset=offset
+    )
 
 
 @router.get("/{investigation_id}", response_model=InvestigationResponse)

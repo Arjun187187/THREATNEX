@@ -43,3 +43,29 @@ class User(Base, UUIDMixin, TimestampMixin):
         back_populates="users",
         lazy="selectin"
     )
+
+    refresh_tokens: Mapped[List["RefreshToken"]] = relationship(
+        "RefreshToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+
+
+class RefreshToken(Base, UUIDMixin, TimestampMixin):
+    """
+    Refresh Token Family & Rotation tracking.
+    Enforces atomic one-time use per token, tracks token families,
+    and detects replay / reuse attacks.
+    """
+    __tablename__ = "refresh_tokens"
+
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    jti: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    family_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    is_revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    expires_at: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    user: Mapped[User] = relationship("User", back_populates="refresh_tokens")

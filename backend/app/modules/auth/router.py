@@ -1,8 +1,12 @@
-"""Authentication REST API routes."""
-from fastapi import APIRouter, Depends, Request, status
+"""Authentication REST API routes with HttpOnly Cookie issuance and CSRF security."""
+from typing import Optional
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.ratelimit import check_rate_limit
+from app.core.token_revocation import revoke_token
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (
     UserRegister,
@@ -11,10 +15,53 @@ from app.modules.auth.schemas import (
     TokenRefreshRequest,
     UserResponse,
 )
-from app.modules.auth.service import register_user, authenticate_user, refresh_access_token
+from app.modules.auth.service import (
+    register_user,
+    authenticate_user,
+    refresh_access_token,
+    revoke_user_sessions,
+)
 from app.modules.audit.service import record_audit_log
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    """Sets secure HttpOnly cookies for web browsers."""
+    response.set_cookie(
+        key="threatnex_access_token",
+        value=access_token,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        domain=settings.COOKIE_DOMAIN,
+        path="/",
+    )
+    response.set_cookie(
+        key="threatnex_refresh_token",
+        value=refresh_token,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        domain=settings.COOKIE_DOMAIN,
+        path="/api/v1/auth",
+    )
+
+
+def clear_auth_cookies(response: Response) -> None:
+    """Clears authentication cookies upon logout."""
+    response.delete_cookie(
+        key="threatnex_access_token",
+        domain=settings.COOKIE_DOMAIN,
+        path="/",
+    )
+    response.delete_cookie(
+        key="threatnex_refresh_token",
+        domain=settings.COOKIE_DOMAIN,
+        path="/api/v1/auth",
+    )
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -23,7 +70,8 @@ async def register(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Register a new user account."""
+    """Register a new user account with strict rate limiting."""
+    await check_rate_limit(request, key_prefix="register", max_requests=10, window_seconds=60)
     user = await register_user(db, user_in)
     await record_audit_log(
         db=db,
@@ -51,13 +99,17 @@ async def register(
 async def login(
     credentials: UserLogin,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    """Authenticate with username/email and password to receive JWT tokens."""
-    from app.core.ratelimit import check_rate_limit
-    check_rate_limit(request, max_requests=10, window_seconds=60) # 10 login attempts / min brute force protection
+    """Authenticate with username/email and password, issuing both HttpOnly cookies and JSON tokens."""
+    await check_rate_limit(request, key_prefix="login", max_requests=10, window_seconds=60)
 
     user, tokens = await authenticate_user(db, credentials)
+
+    # Issue HttpOnly secure cookies
+    set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
+
     await record_audit_log(
         db=db,
         action="USER_LOGIN_SUCCESS",
@@ -73,11 +125,29 @@ async def login(
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
-    payload: TokenRefreshRequest,
+    request: Request,
+    response: Response,
+    payload: Optional[TokenRefreshRequest] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Refresh an access token using a valid refresh token."""
-    return await refresh_access_token(db, payload.refresh_token)
+    """Refresh access token using either HttpOnly cookie or request body."""
+    await check_rate_limit(request, key_prefix="refresh", max_requests=30, window_seconds=60)
+
+    refresh_token_str = None
+    if payload and payload.refresh_token:
+        refresh_token_str = payload.refresh_token
+    else:
+        refresh_token_str = request.cookies.get("threatnex_refresh_token")
+
+    if not refresh_token_str:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token required",
+        )
+
+    tokens = await refresh_access_token(db, refresh_token_str)
+    set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
+    return tokens
 
 
 @router.get("/me", response_model=UserResponse)
@@ -98,15 +168,26 @@ async def get_me(current_user: User = Depends(get_current_user)):
 @router.post("/logout")
 async def logout(
     request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Client-side token disposal endpoint with revocation and audit log."""
-    from app.core.ratelimit import revoke_token
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header.split(" ")[1]
-        revoke_token(token)
+    """Terminates session, revokes access token fingerprint, revokes DB refresh family, and clears cookies."""
+    # Revoke access token in Redis
+    token = request.cookies.get("threatnex_access_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+
+    if token:
+        await revoke_token(token, ttl_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+
+    # Invalidate all user refresh tokens in database
+    await revoke_user_sessions(db, current_user.id)
+
+    # Clear browser cookies
+    clear_auth_cookies(response)
 
     await record_audit_log(
         db=db,
@@ -116,6 +197,6 @@ async def logout(
         user_id=current_user.id,
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
-        details="User logged out and token revoked",
+        details="User logged out and session revoked",
     )
     return {"message": "Successfully logged out and session revoked"}

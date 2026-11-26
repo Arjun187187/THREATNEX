@@ -19,17 +19,15 @@ export const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await apiClient.post<AuthTokens>('/auth/login', {
+      await apiClient.post<AuthTokens>('/auth/login', {
         username_or_email: usernameOrEmail,
         password,
       });
 
-      // Fetch user profile
-      const userRes = await apiClient.get<UserType>('/auth/me', {
-        headers: { Authorization: `Bearer ${res.data.access_token}` },
-      });
+      // Fetch user profile via HttpOnly cookie session
+      const userRes = await apiClient.get<UserType>('/auth/me');
 
-      login(res.data.access_token, res.data.refresh_token, userRes.data);
+      login(userRes.data);
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Authentication failed. Verify credentials.');

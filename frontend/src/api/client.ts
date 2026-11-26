@@ -4,46 +4,27 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true, // Enables browser to send and receive HttpOnly cookies
   headers: {
     'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest', // Anti-CSRF header protection
   },
 });
 
-// Request interceptor to attach access token
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('threatnex_access_token');
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Response interceptor to handle 401s and token refresh
+// Response interceptor to handle 401s and automatic token refresh via HttpOnly cookie
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-      const refreshToken = localStorage.getItem('threatnex_refresh_token');
-      if (refreshToken) {
-        try {
-          const res = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-            refresh_token: refreshToken,
-          });
-          const { access_token, refresh_token: newRefresh } = res.data;
-          localStorage.setItem('threatnex_access_token', access_token);
-          localStorage.setItem('threatnex_refresh_token', newRefresh);
-          originalRequest.headers.Authorization = `Bearer ${access_token}`;
-          return apiClient(originalRequest);
-        } catch (refreshErr) {
-          localStorage.removeItem('threatnex_access_token');
-          localStorage.removeItem('threatnex_refresh_token');
+      try {
+        await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true });
+        return apiClient(originalRequest);
+      } catch (refreshErr) {
+        if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
           window.location.href = '/login';
         }
-      } else {
-        localStorage.removeItem('threatnex_access_token');
-        localStorage.removeItem('threatnex_refresh_token');
       }
     }
     return Promise.reject(error);
