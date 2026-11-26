@@ -66,11 +66,11 @@ services:
       ENVIRONMENT: production
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-threatnex}:${POSTGRES_PASSWORD:-threatnex_secure_password}@postgres:5432/${POSTGRES_DB:-threatnex_db}
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:-threatnex-super-secret-key-change-this-in-env-file-32chars}
+      SECRET_KEY: ${PROD_SECRET_KEY:-threatnex-prod-runtime-master-token-encryption-entropy-64chars}
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       REFRESH_TOKEN_EXPIRE_DAYS: 7
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8001}:8000"
     networks:
       - threatnex_internal
     depends_on:
@@ -94,8 +94,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:mode=1777,size=32M
-      - /var/run:mode=0755,size=16M
-      - /var/cache/nginx:mode=0755,size=64M
+      - /var/run:mode=1777,size=16M
+      - /var/cache/nginx:mode=1777,size=64M
     cap_drop:
       - ALL
     security_opt:
