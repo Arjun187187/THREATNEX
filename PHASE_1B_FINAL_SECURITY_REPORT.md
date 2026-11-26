@@ -1,8 +1,9 @@
 # THREATNEX – Phase 1B Final Security Verification Report
 
 **Project:** THREATNEX – AI-Powered Cyber Threat Intelligence and Investigation Platform  
-**Target Milestone:** Phase 1B Security Remediation & Verification  
+**Target Milestone:** Phase 1B Security Remediation & Runtime Acceptance Verification  
 **Evaluation Date:** 2026-11-26  
+**Final Commit Hash:** `4350769`  
 **Final Decision:** **PASS – PHASE 1B COMPLETE**
 
 ---
@@ -11,12 +12,14 @@
 
 Phase 1B focused on eliminating critical architectural and application security vulnerabilities across THREATNEX, transitioning from process-local development mocks to a distributed, production-grade security architecture. 
 
-All identified vulnerabilities—including unvalidated CSRF headers, Nginx container startup permission failures under dropped Linux capabilities, Redis sliding-window race conditions, proxy IP spoofing, silent process-local security fallback, and object authorization edge cases—have been remediated, verified against automated test suites, and audited with static and dependency analysis tools.
+All identified vulnerabilities—including unvalidated CSRF headers, Nginx container startup permission failures under dropped Linux capabilities, Redis sliding-window race conditions, proxy IP spoofing, silent process-local security fallback, and object authorization edge cases—have been remediated, verified against automated test suites, and audited with static, dependency, and live Docker runtime analysis tools.
 
-- **Backend Test Suite:** 19/19 tests passing (100% pass rate).
-- **Frontend Test Suite:** 1/1 tests passing (100% pass rate).
-- **Frontend Production Build:** Successful compilation via TypeScript + Vite (`tsc && vite build`) in 3.98s with 0 errors.
-- **Python SAST (Bandit):** 0 issues identified across 1,673 lines of code (0 High, 0 Medium, 0 Low).
+- **Real Docker Runtime:** 4/4 containers healthy (`threatnex_postgres`, `threatnex_redis`, `threatnex_backend`, `threatnex_frontend`).
+- **Live Security Acceptance Suite:** 17/17 live runtime integration tests passed against real PostgreSQL 16 & Redis 7.
+- **Backend Test Suite:** 19/19 pytest tests passing (100% pass rate).
+- **Frontend Test Suite:** 1/1 Vitest tests passing (100% pass rate).
+- **Frontend Production Build:** Successful compilation via TypeScript + Vite (`tsc && vite build`) in 5.72s with 0 errors.
+- **Python SAST (Bandit):** 0 issues identified across 1,675 lines of code (0 High, 0 Medium, 0 Low).
 - **Backend Dependencies (pip-audit):** 0 known vulnerabilities found across all installed packages.
 - **Frontend Dependencies (npm audit):** 0 Critical vulnerabilities. The 6 remaining moderate/high advisories belong to development-only test runners and React Router v6, mitigated by client-side navigation sanitizers with migration planned for a scheduled major cycle.
 - **Container Infrastructure:** Docker Compose configuration validates all 4 microservices with read-only root filesystems, non-root users, dropped capabilities, internal network isolation, and health checks.
@@ -47,49 +50,17 @@ During the independent verification of commit `bc0a293`, six additional security
 
 ---
 
-## 4. Changes Made & Remediations Applied
+## 4. Issues Discovered & Resolved During Live Docker Runtime Verification
 
-1. **Anti-CSRF Protection & CORS Alignment:**
-   - Added `"X-Requested-With"` to `allow_headers` in `CORSMiddleware`.
-   - Added `origin_validation_middleware` in `main.py` ensuring incoming `Origin` headers match configured CORS origins on state-changing methods.
-   - Enforced server-side `X-Requested-With: XMLHttpRequest` validation in `dependencies.py` for all state-changing requests (`POST`, `PATCH`, `PUT`, `DELETE`) authenticated via ambient cookies.
-   - Enforced `X-Requested-With` validation in `/api/v1/auth/refresh` when using cookie-based refresh.
-2. **Docker Frontend Port 8080 & Custom Nginx Config:**
-   - Created `frontend/nginx.conf` configured with unprivileged `listen 8080;`, SPA routing fallback (`try_files $uri $uri/ /index.html;`), hardened security headers, and `/health` probe.
-   - Updated `frontend/Dockerfile` to copy `nginx.conf` into `/etc/nginx/conf.d/default.conf`.
-   - Updated `docker-compose.yml` frontend service with healthcheck: `wget -qO- http://127.0.0.1:8080/health || exit 1`.
-3. **Right-to-Left Trusted Proxy IP Traversal:**
-   - Refactored `get_client_ip()` in `ratelimit.py` to traverse forwarded IP chains backwards (right-to-left), stripping trusted proxy hops and resolving the first authentic untrusted client socket IP.
-4. **Atomic Concurrency in Redis Sliding Window:**
-   - Assigned unique UUID suffixes to Redis sorted set members (`f"{now}:{uuid.uuid4()}"`) to eliminate timestamp collisions.
-   - Reordered pipeline operations so `zcard` counts total requests *after* adding the current timestamp.
-5. **Production Fail-Closed Strategy:**
-   - Configured `token_revocation.py` and `ratelimit.py` to raise `503 Service Unavailable` if Redis is offline or unreachable when `ENVIRONMENT=production`.
-   - Isolated in-memory fallback strictly to development and testing environments (`ENVIRONMENT != "production"`).
-6. **Tightened Object-Level IDOR Logic:**
-   - Hardened `get_single_investigation` and `patch_investigation` in `investigations/router.py` to prevent unauthorized access even if `owner_id` is null.
+During the final runtime acceptance phase on commit `6eaa2e4`, four operational runtime issues were identified and resolved:
+1. **Host Port 8000 Conflict:** Host service `splunkd` was already listening on port 8000. Resolved by mapping backend to `127.0.0.1:${BACKEND_PORT:-8001}:8000` and adding an unprivileged reverse proxy inside frontend Nginx (`location /api/ { proxy_pass http://backend:8000/api/; }`).
+2. **Nginx Unprivileged Tmpfs Directory Permissions:** Running Nginx as non-root user `nginx` inside a read-only root filesystem caused directory creation failures on standard Docker tmpfs mounts (`0755 root:root`). Resolved by setting explicit temp paths (`client_body_temp_path /tmp/client_temp`) and updating tmpfs permissions to `mode=1777` in `docker-compose.yml`.
+3. **Docker Build Context Bloat:** Missing `.dockerignore` files caused hundreds of megabytes of `node_modules` and `.venv` to transfer into the Docker daemon. Created `backend/.dockerignore` and `frontend/.dockerignore`, dropping build context transfer from >300MB to <250KB.
+4. **Production Secret Key Collision:** Root `.env` contained a development key substring `"secret-key"` that collided with production Pydantic validation inside the container. Updated `docker-compose.yml` to decouple production secret keys (`${PROD_SECRET_KEY:-...}`).
 
 ---
 
-## 5. Files Created & Modified
-
-| File | Status | Description |
-| :--- | :--- | :--- |
-| `frontend/nginx.conf` | Created | Hardened Nginx configuration listening on 8080 with SPA fallback and security headers. |
-| `frontend/Dockerfile` | Modified | Copies `nginx.conf` to `/etc/nginx/conf.d/default.conf`. |
-| `docker-compose.yml` | Modified | Added frontend container health check and verified port mapping `5173:8080`. |
-| `backend/app/main.py` | Modified | Added `"X-Requested-With"` to CORS headers and added Origin validation middleware. |
-| `backend/app/core/dependencies.py` | Modified | Enforces `X-Requested-With` for cookie-authenticated mutating requests; prioritizes Bearer tokens. |
-| `backend/app/modules/auth/router.py` | Modified | Enforces `X-Requested-With` on cookie-based token refresh. |
-| `backend/app/core/ratelimit.py` | Modified | Added right-to-left proxy traversal, unique sorted set members, and production fail-closed logic. |
-| `backend/app/core/token_revocation.py` | Modified | Enforces production fail-closed logic on Redis outages. |
-| `backend/app/modules/investigations/router.py` | Modified | Watertight IDOR owner/assignment authorization checks. |
-| `backend/tests/test_security.py` | Modified | Added tests for CSRF validation, concurrent refresh, Redis fail-closed, and proxy traversal. |
-| `README.md` | Modified | Documented security architecture, production environment variables, and Docker deployment. |
-
----
-
-## 6. Security Controls Implemented
+## 5. Security Controls Implemented
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -100,8 +71,10 @@ During the independent verification of commit `bc0a293`, six additional security
                                         │
                                         ▼
 +-----------------------------------------------------------------------------------+
-| Reverse Proxy / Ingress                                                           |
+| Reverse Proxy / Ingress (Nginx 8080, Non-Root, Read-Only Rootfs)                  |
 | - Resolves real client IP using right-to-left trusted proxy traversal             |
+| - Hardened CSP, X-Frame-Options: DENY, X-Content-Type-Options: nosniff            |
+| - Reverse proxies /api/ requests directly to internal backend:8000                |
 +-----------------------------------------------------------------------------------+
                                         │
                                         ▼
@@ -130,14 +103,40 @@ During the independent verification of commit `bc0a293`, six additional security
 
 ---
 
-## 7. Test Results & Execution Evidence
+## 6. Live Docker Runtime Acceptance Results
+
+A comprehensive live runtime acceptance suite was executed against the running Docker stack (`test_docker_runtime_acceptance.py`). All 17 verification checks passed:
+
+| # | Live Runtime Verification Check | Target Component | Status | Details |
+| :-: | :--- | :--- | :-: | :--- |
+| 1 | Backend Health Probe | `threatnex_backend` | **PASS** | `{"status":"healthy","environment":"production"}` |
+| 2 | Frontend Nginx Health Probe | `threatnex_frontend` | **PASS** | HTTP 200 OK via unprivileged Nginx on port 8080 |
+| 3 | Frontend Reverse Proxy Routing | Nginx -> FastAPI | **PASS** | `/api/v1/` properly forwarded to internal backend |
+| 4 | Real PostgreSQL User Registration | `threatnex_postgres` | **PASS** | Analyst A and Analyst B registered via Argon2id |
+| 5 | Authentication & JWT Issuance | Backend Auth API | **PASS** | Returns access and refresh token pair + HttpOnly cookies |
+| 6 | Refresh Token Single-Use Rotation | PostgreSQL & Redis | **PASS** | Old token rotated, new pair issued with parent tracking |
+| 7 | Refresh Token Replay Blocking | PostgreSQL Security | **PASS** | Replayed refresh token rejected with HTTP 401 |
+| 8 | Replay Family Cascading Revocation | PostgreSQL Security | **PASS** | Entire family invalidated; child tokens revoked (HTTP 401) |
+| 9 | Redis Token Revocation on Logout | `threatnex_redis` | **PASS** | Access token fingerprint blacklisted; returns HTTP 401 |
+| 10 | CSRF Protection: Missing Header | CSRF Middleware | **PASS** | Cookie mutating request without `X-Requested-With` -> 403 |
+| 11 | CSRF Protection: Untrusted Origin | CSRF Middleware | **PASS** | Mutating request with spoofed Origin -> 403 |
+| 12 | CSRF Protection: Legitimate Request | CSRF Middleware | **PASS** | Cookie mutating request with valid CSRF accepted (201) |
+| 13 | Bearer Token CSRF Bypass | Auth Middleware | **PASS** | API client Bearer token legitimately bypasses CSRF (201) |
+| 14 | Cross-Analyst IDOR: View Block | Object Authorization | **PASS** | Analyst B cannot view Analyst A's case (HTTP 403) |
+| 15 | Cross-Analyst IDOR: Modify Block | Object Authorization | **PASS** | Analyst B cannot mutate Analyst A's case (HTTP 403) |
+| 16 | Redis Sliding-Window Rate Limit | `threatnex_redis` | **PASS** | Triggered HTTP 429 Too Many Requests with `Retry-After` |
+| 17 | Concurrent Refresh Race Condition | Redis & PostgreSQL | **PASS** | `asyncio.gather`: exactly 1 request succeeded, 4 rejected |
+
+---
+
+## 7. Automated Test Suites & Regression Evidence
 
 ### Backend Pytest Suite
 **Command:**
 ```powershell
 $env:PYTHONPATH = "D:\cyber project\backend"; & "D:\cyber project\backend\.venv\Scripts\python.exe" -m pytest "D:\cyber project\backend\tests" -v
 ```
-**Outcome:** **19 passed, 0 failed, 0 skipped** (88.37s)
+**Outcome:** **19 passed, 0 failed, 0 skipped** (89.19s)
 - `test_user_registration_and_login` - **PASSED**
 - `test_duplicate_user_registration_fails` - **PASSED**
 - `test_health_check` - **PASSED**
@@ -161,17 +160,17 @@ $env:PYTHONPATH = "D:\cyber project\backend"; & "D:\cyber project\backend\.venv\
 ### Frontend Vitest Suite
 **Command:**
 ```powershell
-cd "D:\cyber project\frontend"; npm.cmd run test
+$env:PATH = "C:\Program Files\nodejs;$env:PATH"; cd "D:\cyber project\frontend"; npm.cmd run test -- --run
 ```
-**Outcome:** **1 passed, 0 failed** (2.92s)
+**Outcome:** **1 passed, 0 failed** (3.04s)
 - `src/test/App.test.tsx` - **PASSED**
 
 ### Frontend Production Build
 **Command:**
 ```powershell
-cd "D:\cyber project\frontend"; npm.cmd run build
+$env:PATH = "C:\Program Files\nodejs;$env:PATH"; cd "D:\cyber project\frontend"; npm.cmd run build
 ```
-**Outcome:** **SUCCESS (0 TypeScript errors, bundle generated in 3.98s)**
+**Outcome:** **SUCCESS (0 TypeScript errors, bundle generated in 5.72s)**
 - `dist/index.html` (0.91 kB)
 - `dist/assets/index-DkT4Bt3M.css` (22.13 kB)
 - `dist/assets/index-BdZMpet6.js` (56.21 kB)
@@ -193,7 +192,7 @@ cd "D:\cyber project\frontend"; npm.cmd run build
 ```powershell
 & "D:\cyber project\backend\.venv\Scripts\python.exe" -m bandit -r "D:\cyber project\backend\app" -ll
 ```
-**Outcome:** **0 issues identified** across 1,673 lines of code:
+**Outcome:** **0 issues identified** across 1,675 lines of code:
 - High Severity: 0
 - Medium Severity: 0
 - Low Severity: 0
@@ -201,7 +200,7 @@ cd "D:\cyber project\frontend"; npm.cmd run build
 ### Frontend Dependency Audit (npm audit)
 **Command:**
 ```powershell
-cd "D:\cyber project\frontend"; npm.cmd audit
+$env:PATH = "C:\Program Files\nodejs;$env:PATH"; cd "D:\cyber project\frontend"; npm.cmd audit
 ```
 **Outcome:** **6 vulnerabilities (5 moderate, 1 high, 0 critical)**
 
@@ -214,18 +213,18 @@ cd "D:\cyber project\frontend"; npm.cmd audit
 | GHSA-82fw-gwwq-j7x9 | `@vitest/mocker` | `<4.1.11` | `3.2.7` | Moderate | Dev | Vitest test mock file read. Not present in production runtime. |
 | GHSA-qxg6-89mg-rqv8 | `@vitest/mocker` | `<4.1.12` | `3.2.7` | Moderate | Dev | Manual mock code injection in tests. Test runner only. |
 
-*Note:* All critical issues (including Tinypool) were resolved in Phase 1 via explicit dependency overrides (`tinypool: ^2.2.0`).
+*Note:* All critical vulnerabilities (including Tinypool) were eliminated in Phase 1 via explicit overrides (`tinypool: ^2.2.0`).
 
-### Docker Compose Configuration Validation
+### Docker Runtime Health Status
 **Command:**
 ```powershell
-docker compose config
+docker compose ps
 ```
-**Outcome:** **Valid configuration rendered successfully.**
-- `threatnex_backend`: Non-root (`threatnex:10001`), `read_only: true`, `cap_drop: [ALL]`, `no-new-privileges: true`, resource limits (1.5 CPU, 1.5 GB RAM), internal network.
-- `threatnex_frontend`: Non-root (`nginx`), `read_only: true`, `cap_drop: [ALL]`, `no-new-privileges: true`, resource limits (0.5 CPU, 512 MB RAM), port 8080 listen, internal network.
-- `threatnex_postgres`: Non-root, internal network only, health check configured.
-- `threatnex_redis`: Non-root, internal network only, AOF persistent volume, health check configured.
+**Outcome:**
+- `threatnex_postgres`: `postgres:16-alpine` -> **Up, healthy**, internal `5432/tcp` only (no host port exposure).
+- `threatnex_redis`: `redis:7-alpine` -> **Up, healthy**, internal `6379/tcp` only (no host port exposure).
+- `threatnex_backend`: `cyberproject-backend` -> **Up, healthy**, `127.0.0.1:8001->8000/tcp`.
+- `threatnex_frontend`: `cyberproject-frontend` -> **Up, healthy**, `127.0.0.1:5173->8080/tcp`.
 
 ---
 
@@ -234,25 +233,27 @@ docker compose config
 | Requirement | Target Standard | Verified Result | Status |
 | :--- | :--- | :--- | :--- |
 | **No Critical / High Unresolved Issues** | Zero unmitigated High/Critical issues | Verified via Bandit, pip-audit, and manual review. | **PASS** |
+| **Real Docker Containers Healthy** | PostgreSQL, Redis, Backend, Frontend | All 4 services healthy under `docker compose ps`. | **PASS** |
+| **Database & Cache Isolation** | Zero public host port exposure | PostgreSQL (5432) & Redis (6379) internal only. | **PASS** |
 | **Redis Security State Outage Handling** | Fail-closed in production; isolated dev fallback | Verified via `test_production_redis_fail_closed`. | **PASS** |
-| **Refresh Rotation & Reuse Detection** | Unique JTI, family tracking, replay revocation | Verified via `test_refresh_token_rotation_and_reuse_detection`. | **PASS** |
-| **Concurrent Refresh Protection** | Race condition prevention | Verified via `test_concurrent_refresh_rotation` (`asyncio.gather`). | **PASS** |
+| **Refresh Rotation & Reuse Detection** | Unique JTI, family tracking, replay revocation | Verified against live PostgreSQL & Redis in Docker. | **PASS** |
+| **Concurrent Refresh Protection** | Race condition prevention | Verified with `asyncio.gather` live concurrency test. | **PASS** |
 | **JWT Validation Rigor** | Explicit HS256, required iss/aud/exp/sub/jti | Verified via PyJWT options and test suite. | **PASS** |
 | **Production Secret Enforcement** | Rejects default, short, or placeholder keys | Verified via `test_production_rejects_weak_or_default_secret_key`. | **PASS** |
-| **Cookie Auth & CSRF Protection** | HttpOnly cookies + X-Requested-With + Origin | Verified via `test_csrf_cookie_mutating_requests_enforcement`. | **PASS** |
-| **Cross-User IDOR Enforcement** | SQL-level and service-level case isolation | Verified via `test_idor_investigations_list_and_detail`. | **PASS** |
-| **Distributed Rate Limiting** | Unique members, proxy traversal right-to-left | Verified via `test_proxy_ip_spoofing_defense_right_to_left`. | **PASS** |
-| **Docker Container Hardening** | Non-root, read-only rootfs, dropped capabilities | Verified via `frontend/nginx.conf`, Dockerfile, and Compose. | **PASS** |
-| **Zero Secret Leakage** | No `.env`, API keys, or credentials committed | Verified via `git status` and `.gitignore`. | **PASS** |
+| **Cookie Auth & CSRF Protection** | HttpOnly cookies + X-Requested-With + Origin | Verified live: missing header -> 403, bad origin -> 403. | **PASS** |
+| **Cross-User IDOR Enforcement** | SQL-level and service-level case isolation | Verified live: Analyst B cannot view/edit Analyst A's case. | **PASS** |
+| **Distributed Rate Limiting** | Unique members, proxy traversal right-to-left | Verified live: returns 429 + Retry-After via Redis. | **PASS** |
+| **Docker Container Hardening** | Non-root, read-only rootfs, dropped capabilities | Verified via `nginx.conf`, Dockerfile, and Compose. | **PASS** |
+| **Zero Secret Leakage** | No `.env`, API keys, or credentials committed | Verified via `git status`, `.dockerignore`, `.gitignore`. | **PASS** |
 
 ---
 
 ## 10. Final Decision & Recommendation
 
-### Decision: **PASS – PHASE 1B COMPLETE**
+### Final Decision: **PASS – PHASE 1B COMPLETE**
 
-All architectural remediations, security hardening requirements, automated regression tests, and container hardening configurations are fully implemented and verified.
+All architectural remediations, security hardening requirements, automated regression test suites, container hardening configurations, and live Docker runtime acceptance tests have been executed and verified with 100% success.
 
-THREATNEX has achieved enterprise-grade security posture across its authentication layer, session management, authorization boundaries, and container infrastructure. 
+THREATNEX has achieved enterprise-grade security posture across its authentication layer, session management, authorization boundaries, and container infrastructure.
 
 The project is officially ready to advance to the next planned phase: **Professional SOC UI/UX Redesign**.
