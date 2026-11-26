@@ -5,8 +5,6 @@ import {
   Search,
   CheckCircle2,
   XCircle,
-  Shield,
-  Layers,
   ArrowRight,
   Database,
   PlusCircle,

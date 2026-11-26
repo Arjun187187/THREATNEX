@@ -16,6 +16,7 @@ import { DashboardStats, Investigation } from '../types';
 import { MetricCard } from '../components/common/MetricCard';
 import { EmptyState } from '../components/common/EmptyState';
 import { StatusBadge, PriorityBadge } from '../components/common/Badges';
+import { sanitizeInternalPath } from '../utils/navigation';
 
 export const Dashboard: React.FC = () => {
   const [quickSearch, setQuickSearch] = useState('');
@@ -42,7 +43,8 @@ export const Dashboard: React.FC = () => {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (quickSearch.trim()) {
-      navigate(`/ioc-search?q=${encodeURIComponent(quickSearch.trim())}`);
+      const target = `/ioc-search?q=${encodeURIComponent(quickSearch.trim())}`;
+      navigate(sanitizeInternalPath(target));
     }
   };
 

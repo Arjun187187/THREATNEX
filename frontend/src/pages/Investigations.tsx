@@ -4,14 +4,12 @@ import {
   Briefcase,
   Plus,
   Filter,
-  CheckCircle2,
   Clock,
-  Layers,
   X,
   UserCheck,
 } from 'lucide-react';
 import { apiClient } from '../api/client';
-import { Investigation, InvestigationPriority, InvestigationStatus } from '../types';
+import { Investigation, InvestigationPriority } from '../types';
 import { StatusBadge, PriorityBadge, IOCTypePill } from '../components/common/Badges';
 import { EmptyState } from '../components/common/EmptyState';
 
