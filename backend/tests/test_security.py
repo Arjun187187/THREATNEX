@@ -118,7 +118,11 @@ async def test_httponly_cookie_authentication_and_logout_revocation(client):
     assert me_res.json()["username"] == "cookie_user"
 
     # Logout
-    logout_res = await client.post("/api/v1/auth/logout", cookies={"threatnex_access_token": access_cookie})
+    logout_res = await client.post(
+        "/api/v1/auth/logout",
+        cookies={"threatnex_access_token": access_cookie},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
     assert logout_res.status_code == 200
 
     # Cookie is revoked in revocation manager; reuse must be denied
@@ -149,3 +153,125 @@ async def test_proxy_ip_spoofing_defense(client):
 
     resolved_ip = get_client_ip(mock_request)
     assert resolved_ip == "203.0.113.195"  # Must NOT trust spoofed header
+
+
+@pytest.mark.asyncio
+async def test_csrf_cookie_mutating_requests_enforcement(client):
+    """Verify state-changing requests using cookie authentication require valid CSRF protection."""
+    # 1. Register & login
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "csrf_test@threatnex.io", "username": "csrf_test", "password": "Password123!Secure"},
+    )
+    login_res = await client.post(
+        "/api/v1/auth/login",
+        json={"username_or_email": "csrf_test", "password": "Password123!Secure"},
+    )
+    access_cookie = login_res.cookies["threatnex_access_token"]
+
+    # 2. Attack: POST request with auth cookie but MISSING X-Requested-With header
+    attack_res = await client.post(
+        "/api/v1/investigations/",
+        json={"title": "CSRF Attack Attempt", "priority": "low"},
+        cookies={"threatnex_access_token": access_cookie},
+    )
+    assert attack_res.status_code == 403
+    assert "CSRF verification failed" in attack_res.json()["detail"]
+
+    # 3. Attack: Untrusted cross-site Origin
+    origin_res = await client.post(
+        "/api/v1/investigations/",
+        json={"title": "CSRF Untrusted Origin", "priority": "low"},
+        cookies={"threatnex_access_token": access_cookie},
+        headers={"Origin": "https://evil-attacker.example.com", "X-Requested-With": "XMLHttpRequest"},
+    )
+    assert origin_res.status_code == 403
+    assert "Untrusted Origin" in origin_res.json()["detail"]
+
+    # 4. Legitimate request: Auth cookie + X-Requested-With header
+    legit_res = await client.post(
+        "/api/v1/investigations/",
+        json={"title": "Legitimate Safe Investigation", "priority": "low"},
+        cookies={"threatnex_access_token": access_cookie},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert legit_res.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_concurrent_refresh_rotation(client):
+    """Verify simultaneous concurrent refresh requests cannot both succeed."""
+    import asyncio
+
+    reg = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "concurrent_test@threatnex.io", "username": "concurrent_test", "password": "Password123!Secure"},
+    )
+    assert reg.status_code == 201
+
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={"username_or_email": "concurrent_test", "password": "Password123!Secure"},
+    )
+    refresh_token = login.json()["refresh_token"]
+
+    # Fire two refresh requests simultaneously
+    results = await asyncio.gather(
+        client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token}),
+        client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token}),
+        return_exceptions=True
+    )
+
+    status_codes = [r.status_code for r in results if not isinstance(r, Exception)]
+    success_count = sum(1 for s in status_codes if s == 200)
+    assert success_count <= 1, "Concurrent refresh requests must never both succeed!"
+
+
+@pytest.mark.asyncio
+async def test_production_redis_fail_closed():
+    """Verify token revocation and rate limiting fail closed when ENVIRONMENT is production and Redis is offline."""
+    from fastapi import HTTPException
+    from app.core.config import settings
+    from app.core.token_revocation import revoke_token, is_token_revoked
+    from app.core.ratelimit import check_rate_limit
+    from unittest.mock import MagicMock
+
+    original_env = settings.ENVIRONMENT
+    try:
+        settings.ENVIRONMENT = "production"
+
+        # Revoke token must fail closed with 503
+        with pytest.raises(HTTPException) as exc1:
+            await revoke_token("test-token-jwt-value")
+        assert exc1.value.status_code == 503
+
+        # Is token revoked must fail closed with 503
+        with pytest.raises(HTTPException) as exc2:
+            await is_token_revoked("test-token-jwt-value")
+        assert exc2.value.status_code == 503
+
+        # Rate limit must fail closed with 503
+        mock_req = MagicMock()
+        mock_req.client.host = "127.0.0.1"
+        mock_req.headers.get.return_value = None
+        with pytest.raises(HTTPException) as exc3:
+            await check_rate_limit(mock_req)
+        assert exc3.value.status_code == 503
+
+    finally:
+        settings.ENVIRONMENT = original_env
+
+
+def test_proxy_ip_spoofing_defense_right_to_left():
+    """Verify reverse proxy right-to-left traversal correctly identifies real external client IP."""
+    from app.core.ratelimit import get_client_ip
+    from unittest.mock import MagicMock
+
+    # Scenario: Direct peer is trusted reverse proxy (127.0.0.1)
+    # Attacker forged "8.8.8.8" in X-Forwarded-For, proxy appended real client IP "203.0.113.50"
+    mock_request = MagicMock()
+    mock_request.client.host = "127.0.0.1"
+    mock_request.headers.get.return_value = "8.8.8.8, 203.0.113.50"
+
+    resolved = get_client_ip(mock_request)
+    assert resolved == "203.0.113.50", "Must pick first untrusted IP from the right, not spoofed leftmost IP"

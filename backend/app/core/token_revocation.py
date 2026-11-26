@@ -1,10 +1,13 @@
 """Token Revocation Manager.
 Uses SHA-256 token hashing or unique JTI, persisting to Redis with TTL.
-Falls back to bounded in-memory set if Redis is offline during local dev.
+Enforces strict fail-closed security in production if Redis is unavailable.
+Falls back to bounded in-memory set exclusively during local development/testing.
 """
 import hashlib
 import logging
 from typing import Optional, Set
+from fastapi import HTTPException, status
+from app.core.config import settings
 from app.core.redis import get_redis_client
 
 logger = logging.getLogger("threatnex.revocation")
@@ -30,7 +33,20 @@ async def revoke_token(token: str, ttl_seconds: int = 86400) -> None:
             return
         except Exception as e:
             logger.error(f"Failed to record token revocation in Redis: {e}")
-    # Local fallback
+            if settings.ENVIRONMENT == "production":
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Security service temporarily unavailable. Token revocation could not be persisted.",
+                )
+    else:
+        if settings.ENVIRONMENT == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Security service temporarily unavailable. Distributed cache connection offline.",
+            )
+
+    # Local fallback for development / test mode
+    logger.warning("Using local in-memory token revocation fallback (development mode only).")
     _local_revoked_hashes.add(token_hash)
 
 
@@ -46,6 +62,18 @@ async def is_token_revoked(token: str) -> bool:
             return bool(exists)
         except Exception as e:
             logger.error(f"Failed to query token revocation from Redis: {e}")
+            if settings.ENVIRONMENT == "production":
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Security service temporarily unavailable. Revocation check failed.",
+                )
+    else:
+        if settings.ENVIRONMENT == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Security service temporarily unavailable. Distributed cache connection offline.",
+            )
+
     return token_hash in _local_revoked_hashes
 
 

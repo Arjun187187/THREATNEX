@@ -42,8 +42,22 @@ app.add_middleware(
     allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "User-Agent"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "User-Agent", "X-Requested-With"],
 )
+
+
+# Origin validation middleware for state-changing requests
+@app.middleware("http")
+async def origin_validation_middleware(request: Request, call_next):
+    if request.method in ("POST", "PATCH", "PUT", "DELETE"):
+        origin = request.headers.get("origin")
+        if origin and origin not in settings.BACKEND_CORS_ORIGINS:
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "CSRF verification failed: Untrusted Origin."},
+            )
+
+    return await call_next(request)
 
 
 # Security headers and request size limit middleware

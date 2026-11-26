@@ -106,6 +106,38 @@ docker compose up -d --build
 
 ---
 
+## Security Architecture & Production Configuration
+
+ThreatNex enforces multi-layered defense-in-depth across authentication, data persistence, and container infrastructure:
+
+### 1. Authentication & Token Lifecycle
+- **HttpOnly Secure Cookies**: Access and refresh tokens are delivered via `HttpOnly`, `SameSite=Lax`, `Secure` (in production) cookies. Zero authentication tokens are stored in browser `localStorage` or `sessionStorage`.
+- **Refresh Token Rotation & Reuse Detection**: Every refresh token has a unique UUID `jti` and is tracked in a cryptographic token `family_id` persisted in PostgreSQL. Replaying a consumed token immediately revokes the entire token family.
+- **Distributed Token Revocation**: Logout and session termination blacklist token SHA-256 fingerprints in Redis with automated TTLs matching token expiration.
+- **Fail-Closed Security in Production**: If Redis is offline during production (`ENVIRONMENT=production`), token revocation and rate-limiting operations fail closed (503 Service Unavailable) to prevent split-brain state across backend workers.
+
+### 2. Rate Limiting & Anti-CSRF Protections
+- **Sliding-Window Atomic Rate Limiting**: Managed via Redis sorted sets with unique member tracking to prevent race conditions and timestamp collisions.
+- **Trusted Proxy Resolution**: IP resolution traverses forwarded proxy chains from right to left, stripping trusted hops to prevent `X-Forwarded-For` client spoofing.
+- **Dual Anti-CSRF Validation**: State-changing requests (`POST`, `PATCH`, `PUT`, `DELETE`) authenticated via ambient cookies must carry the custom `X-Requested-With: XMLHttpRequest` header, and incoming `Origin` headers are strictly validated against allowed CORS origins.
+
+### 3. Container & Infrastructure Hardening
+- **Non-Root Execution**: Backend runs under UID 10001 (`threatnex`), Frontend runs as unprivileged user `nginx`.
+- **Read-Only Root Filesystems**: Containers run with `read_only: true` with explicitly bounded `tmpfs` mounts for `/tmp`, `/var/run`, and `/var/cache/nginx`.
+- **Linux Capability Drops**: All kernel capabilities are dropped (`cap_drop: [ALL]`), and privilege escalation is disabled (`no-new-privileges: true`).
+- **Network Isolation**: PostgreSQL (5432) and Redis (6379) are isolated exclusively to the internal bridge network `threatnex_internal` without host port exposure.
+
+### 4. Mandatory Production Environment Variables
+| Variable | Production Requirement | Description |
+| :--- | :--- | :--- |
+| `ENVIRONMENT` | `production` | Activates strict production security validators and HSTS. |
+| `SECRET_KEY` | At least 32 characters, high entropy | Cryptographic key. Placeholders and development strings are rejected on startup. |
+| `COOKIE_SECURE` | `True` | Enforces HTTPS-only transmission for session cookies. |
+| `TRUSTED_PROXIES` | E.g. `["10.0.0.1", "172.18.0.2"]` | Comma-separated or JSON list of internal reverse proxy IPs for safe client IP resolution. |
+| `BACKEND_CORS_ORIGINS` | Production domains | Whitelist of trusted frontend origins allowed for credentialed requests. |
+
+---
+
 ## Roadmap
 
 - **Phase 2**: Threat Intelligence Feed Integrations (VirusTotal, AbuseIPDB, AlienVault OTX, URLhaus, CISA KEV).

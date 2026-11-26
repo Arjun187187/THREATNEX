@@ -20,6 +20,7 @@ RUN chown -R nginx:nginx /usr/share/nginx/html && \
     chown -R nginx:nginx /var/run/nginx.pid
 
 COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
+COPY --chown=nginx:nginx nginx.conf /etc/nginx/conf.d/default.conf
 
 USER nginx
 

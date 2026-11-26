@@ -27,13 +27,14 @@ async def get_current_user(
     2. 'Authorization: Bearer <token>' header (API clients / tools)
     """
     token: Optional[str] = None
+    is_cookie_auth = False
 
-    # Check cookie first
-    cookie_token = request.cookies.get("threatnex_access_token")
-    if cookie_token:
-        token = cookie_token
-    elif credentials and credentials.credentials:
+    # Check Bearer header first (API clients)
+    if credentials and credentials.credentials:
         token = credentials.credentials
+    elif request.cookies.get("threatnex_access_token"):
+        token = request.cookies.get("threatnex_access_token")
+        is_cookie_auth = True
 
     if not token:
         raise HTTPException(
@@ -41,6 +42,14 @@ async def get_current_user(
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # For browser cookie authentication on state-changing methods, enforce Anti-CSRF custom header
+    if is_cookie_auth and request.method in ("POST", "PATCH", "PUT", "DELETE"):
+        if request.headers.get("x-requested-with") != "XMLHttpRequest":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF verification failed: Missing or invalid X-Requested-With header.",
+            )
 
     # Check distributed token revocation blacklist (Redis-backed)
     if await is_token_revoked(token):

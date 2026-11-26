@@ -137,6 +137,12 @@ async def refresh_token(
     if payload and payload.refresh_token:
         refresh_token_str = payload.refresh_token
     else:
+        # Browser cookie flow: Enforce anti-CSRF custom header
+        if request.headers.get("x-requested-with") != "XMLHttpRequest":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF verification failed: Missing or invalid X-Requested-With header.",
+            )
         refresh_token_str = request.cookies.get("threatnex_refresh_token")
 
     if not refresh_token_str:

@@ -75,8 +75,11 @@ async def get_single_investigation(
     inv = await get_investigation_by_id(db, investigation_id)
     user_roles = [r.name for r in current_user.roles]
     # Enforce object authorization: Admins can view any case; Analysts can view unassigned or assigned cases or cases they own
-    if "Admin" not in user_roles and inv.owner_id and inv.owner_id != current_user.id:
-        if inv.assigned_to and inv.assigned_to != current_user.username:
+    if "Admin" not in user_roles:
+        is_owner = (inv.owner_id == current_user.id)
+        is_assigned = (inv.assigned_to == current_user.username)
+        is_unassigned = (inv.assigned_to is None)
+        if not (is_owner or is_assigned or is_unassigned):
             from fastapi import HTTPException, status
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -96,8 +99,11 @@ async def patch_investigation(
     """Update title, status, priority, or attached IOCs with IDOR authorization."""
     inv = await get_investigation_by_id(db, investigation_id)
     user_roles = [r.name for r in current_user.roles]
-    if "Admin" not in user_roles and inv.owner_id and inv.owner_id != current_user.id:
-        if inv.assigned_to and inv.assigned_to != current_user.username:
+    if "Admin" not in user_roles:
+        is_owner = (inv.owner_id == current_user.id)
+        is_assigned = (inv.assigned_to == current_user.username)
+        is_unassigned = (inv.assigned_to is None)
+        if not (is_owner or is_assigned or is_unassigned):
             from fastapi import HTTPException, status
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
