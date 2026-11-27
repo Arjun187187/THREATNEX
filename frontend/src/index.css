@@ -4,22 +4,40 @@
 
 @layer base {
   body {
-    @apply bg-[#0B0F19] text-slate-100 min-h-screen overflow-x-hidden font-sans;
+    @apply bg-soc-base text-soc-text min-h-screen overflow-x-hidden font-sans antialiased selection:bg-soc-accent/30 selection:text-white;
+  }
+
+  /* Accessible focus rings */
+  :focus-visible {
+    @apply outline-none ring-2 ring-soc-accent ring-offset-2 ring-offset-soc-base;
   }
 }
 
-/* Custom SOC scrollbar */
+/* Premium SOC scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0B0F19;
+  background: #080C14;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1F2937;
+  background: #1E2E4E;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #374151;
+  background: #2A3F6A;
+}
+
+/* Subtle grid pattern utility */
+.bg-soc-grid {
+  background-image: radial-gradient(rgba(30, 46, 78, 0.4) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Glass panel effect */
+.soc-glass {
+  background: rgba(13, 21, 38, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }

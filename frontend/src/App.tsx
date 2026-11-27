@@ -33,8 +33,9 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
   if (loading) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-[#0B0F19] text-cyan-400">
-        <span className="w-8 h-8 border-2 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin"></span>
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-soc-base text-soc-accent gap-3">
+        <span className="w-8 h-8 border-2 border-soc-accent/20 border-t-soc-accent rounded-full animate-spin" />
+        <span className="font-mono text-xs uppercase tracking-widest text-slate-400">Initializing SOC Session...</span>
       </div>
     );
   }

@@ -20,71 +20,90 @@ export const Login: React.FC = () => {
 
     try {
       await apiClient.post<AuthTokens>('/auth/login', {
-        username_or_email: usernameOrEmail,
+        username_or_email: usernameOrEmail.trim(),
         password,
       });
 
       // Fetch user profile via HttpOnly cookie session
       const userRes = await apiClient.get<UserType>('/auth/me');
-
       login(userRes.data);
       navigate('/');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Authentication failed. Verify credentials.');
+      setError(
+        err.response?.data?.detail ||
+          'Authentication rejected. Verify credentials or check rate-limit backoff.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen w-screen flex items-center justify-center bg-[#070A12] px-4">
-      <div className="w-full max-w-md bg-[#0D1322] border border-slate-800 rounded-2xl shadow-2xl p-8">
-        <div className="flex flex-col items-center mb-8">
-          <div className="p-3 bg-cyan-950/60 border border-cyan-800 rounded-xl text-cyan-400 mb-3">
-            <ShieldAlert className="w-8 h-8 animate-pulse" />
+    <div className="min-h-screen w-screen flex items-center justify-center bg-soc-base bg-soc-grid px-4 py-8">
+      <div className="w-full max-w-md bg-soc-surface border border-soc-border rounded-2xl shadow-soc-elevated p-6 sm:p-8 space-y-6">
+        {/* Brand Header */}
+        <div className="flex flex-col items-center text-center">
+          <div className="p-3 bg-soc-accent/10 border border-soc-accent/30 rounded-xl text-soc-accent mb-3 shadow-soc-subtle">
+            <ShieldAlert className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold tracking-wider text-white">THREATNEX SOC</h1>
-          <p className="text-xs text-slate-400 mt-1">Authorized Security Personnel Only</p>
+          <h1 className="text-xl font-bold tracking-wider text-white font-mono">THREATNEX SOC</h1>
+          <p className="text-xs text-slate-400 mt-1 font-mono uppercase tracking-widest text-[10px]">
+            Enterprise Cyber Threat Intelligence Command
+          </p>
         </div>
 
+        {/* Security Notice Banner */}
+        <div className="px-3.5 py-2.5 rounded-lg bg-soc-card border border-soc-borderSubtle flex items-center justify-between text-[11px] font-mono text-slate-400">
+          <div className="flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 text-soc-accent" />
+            <span>Authorized Personnel Only</span>
+          </div>
+          <span className="text-emerald-400 text-[10px] font-semibold">TLS / HTTPONLY</span>
+        </div>
+
+        {/* Error Alert */}
         {error && (
-          <div className="mb-6 p-3 bg-red-950/50 border border-red-800/80 rounded-lg flex items-center gap-2 text-xs text-red-300">
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-            <span>{error}</span>
+          <div className="p-3.5 bg-rose-950/40 border border-rose-800/80 rounded-xl flex items-start gap-2.5 text-xs text-rose-300 animate-in fade-in">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+            <span className="font-sans leading-relaxed">{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
           <div>
-            <label className="block text-xs font-mono uppercase text-slate-400 mb-2">
+            <label className="block uppercase text-slate-400 mb-1.5 font-semibold">
               Operator Identifier / Email
             </label>
             <div className="relative">
-              <User className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
+              <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
               <input
                 type="text"
                 required
                 value={usernameOrEmail}
                 onChange={(e) => setUsernameOrEmail(e.target.value)}
-                placeholder="secops_lead"
-                className="w-full bg-[#111827] border border-slate-800 focus:border-cyan-500 rounded-lg pl-10 pr-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none transition-colors"
+                placeholder="secops_lead or analyst@threatnex.org"
+                className="w-full bg-soc-base border border-soc-border focus:border-soc-accent rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none transition-colors"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-mono uppercase text-slate-400 mb-2">
-              Passphrase
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block uppercase text-slate-400 font-semibold">
+                Passphrase
+              </label>
+              <span className="text-[10px] text-slate-500">Argon2id Encrypted</span>
+            </div>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
+              <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
               <input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                className="w-full bg-[#111827] border border-slate-800 focus:border-cyan-500 rounded-lg pl-10 pr-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none transition-colors"
+                className="w-full bg-soc-base border border-soc-border focus:border-soc-accent rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none transition-colors"
               />
             </div>
           </div>
@@ -92,23 +111,24 @@ export const Login: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 py-3 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium text-sm rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-cyan-950 transition-all"
+            className="w-full mt-2 py-3 bg-soc-accent hover:bg-soc-accentHover disabled:opacity-50 text-white font-medium text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-soc-subtle transition-all"
           >
             {loading ? (
-              <span className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+              <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
             ) : (
               <>
-                <span>Authenticate & Access Console</span>
+                <span>Authenticate Session</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
         </form>
 
-        <div className="mt-6 text-center text-xs text-slate-500">
-          First time analyst?{' '}
-          <Link to="/register" className="text-cyan-400 hover:underline">
-            Register operator identity
+        {/* Footer */}
+        <div className="pt-4 border-t border-soc-border flex items-center justify-between text-[11px] font-mono text-slate-500">
+          <span>Need operator access?</span>
+          <Link to="/register" className="text-soc-accent hover:underline">
+            Register Operator
           </Link>
         </div>
       </div>
