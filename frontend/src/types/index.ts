@@ -127,3 +127,63 @@ export interface IOCInvestigationHistoryItem {
   created_at: string;
 }
 
+export interface MitreTechnique {
+  technique_id: string;
+  technique_name: string;
+  tactic: string;
+  evidence: string;
+  confidence: 'High' | 'Medium' | 'Low' | string;
+}
+
+export interface AIAnalysisDetail {
+  executive_summary: string;
+  threat_classification: string;
+  reasoning: string;
+  risk_level: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'CLEAN' | 'UNKNOWN' | string;
+  confidence_score: number;
+  provider_evidence_summary: Record<string, string>;
+  confirmed_evidence: string[];
+  hypotheses: string[];
+  false_positive_analysis: string;
+  recommended_investigation_steps: string[];
+  recommended_containment_actions: string[];
+  mitre_techniques: MitreTechnique[];
+  analyst_conclusion: string;
+}
+
+export interface AIAnalysisResponse {
+  id: string;
+  investigation_id?: string | null;
+  indicator_value: string;
+  ioc_type: string;
+  model_name: string;
+  risk_level: string;
+  threat_classification: string;
+  confidence_score: number;
+  executive_summary: string;
+  analysis_details: AIAnalysisDetail;
+  operator_id?: string | null;
+  created_at: string;
+}
+
+export interface AIAnalysisListItem {
+  id: string;
+  investigation_id?: string | null;
+  indicator_value: string;
+  ioc_type: string;
+  model_name: string;
+  risk_level: string;
+  threat_classification: string;
+  confidence_score: number;
+  executive_summary: string;
+  operator_id?: string | null;
+  created_at: string;
+}
+
+export interface AIAnalysisRequest {
+  investigation_id?: string | null;
+  indicator_value?: string | null;
+  ioc_type?: string | null;
+}
+
+

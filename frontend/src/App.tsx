@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   Radio,
-  Cpu,
   ShieldAlert,
   BookmarkCheck,
   FileText,
@@ -17,6 +16,7 @@ import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
 import { IOCInvestigation } from './pages/IOCInvestigation';
 import { Investigations } from './pages/Investigations';
+import { AIAnalyst } from './pages/AIAnalyst';
 import { PlaceholderPage } from './pages/placeholders/PlaceholderPage';
 
 const queryClient = new QueryClient({
@@ -107,19 +107,7 @@ export const App: React.FC = () => {
               path="/ai-analyst"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="AI Cyber Threat Analyst"
-                    moduleName="Module 8: Autonomous Threat Reasoning"
-                    phase="Phase 2 Scheduled"
-                    icon={Cpu}
-                    description="Provider-independent AI threat analyst architecture capable of synthesizing structured IOC evidence, evaluating risk scores, identifying lateral movement patterns, and generating MITRE ATT&CK mappings."
-                    plannedFeatures={[
-                      'Structured prompt reasoning framework on confirmed threat evidence',
-                      'Anti-hallucination guardrails: Never fabricates CVEs or fake threat actors',
-                      'Severity explanation and recommended incident response triage steps',
-                      'Strict differentiation between verified telemetry and hypothetical findings',
-                    ]}
-                  />
+                  <AIAnalyst />
                 </ProtectedRoute>
               }
             />

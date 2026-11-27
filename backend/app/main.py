@@ -11,6 +11,7 @@ from app.modules.indicators.router import router as indicators_router
 from app.modules.investigations.router import router as investigations_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.audit.router import router as audit_router
+from app.modules.ai_analyst.router import router as ai_analyst_router
 
 
 @asynccontextmanager
@@ -118,3 +119,4 @@ app.include_router(indicators_router, prefix=api_prefix)
 app.include_router(investigations_router, prefix=api_prefix)
 app.include_router(dashboard_router, prefix=api_prefix)
 app.include_router(audit_router, prefix=api_prefix)
+app.include_router(ai_analyst_router, prefix=api_prefix)
