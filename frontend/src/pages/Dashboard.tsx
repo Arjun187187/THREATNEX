@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Activity,
   ChevronRight,
+  Radio,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -27,7 +28,7 @@ import {
   Legend,
 } from 'recharts';
 import { apiClient } from '../api/client';
-import { DashboardStats, Investigation, Indicator } from '../types';
+import { DashboardStats, Investigation, Indicator, ThreatFeedListResponse } from '../types';
 import { MetricCard } from '../components/common/MetricCard';
 import { EmptyState } from '../components/common/EmptyState';
 import { StatusBadge, PriorityBadge, IOCTypePill, SeverityBadge } from '../components/common/Badges';
@@ -84,10 +85,27 @@ export const Dashboard: React.FC = () => {
     },
   });
 
+  // Fetch live threat feed preview
+  const {
+    data: liveThreatFeed,
+    refetch: refetchFeed,
+  } = useQuery<ThreatFeedListResponse>({
+    queryKey: ['dashboard-threat-feed'],
+    queryFn: async () => {
+      try {
+        const res = await apiClient.get<ThreatFeedListResponse>('/threat-intel/feed?page=1&page_size=4');
+        return res.data;
+      } catch {
+        return { items: [], total: 0, page: 1, page_size: 4, total_pages: 1 };
+      }
+    },
+  });
+
   const handleRefreshAll = () => {
     refetchStats();
     refetchInvs();
     refetchIocs();
+    refetchFeed();
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -334,6 +352,66 @@ export const Dashboard: React.FC = () => {
             {stats?.total_investigations ?? 0} total incidents tracked
           </div>
         </div>
+      </div>
+
+      {/* Live Threat Intelligence Feed Preview */}
+      <div className="bg-soc-surface border border-soc-border rounded-xl p-5 shadow-soc-card space-y-3">
+        <div className="flex items-center justify-between pb-3 border-b border-soc-border">
+          <div className="flex items-center gap-2">
+            <Radio className="w-4 h-4 text-soc-accent animate-pulse" />
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+              Live Threat Intelligence Stream
+            </h3>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+              AlienVault OTX • URLhaus • CISA KEV • AbuseIPDB
+            </span>
+          </div>
+          <button
+            onClick={() => navigate('/threat-intel')}
+            className="text-xs text-soc-accent hover:text-soc-accentHover font-mono font-medium flex items-center gap-1 transition-colors"
+          >
+            <span>Explore Full Feed ({liveThreatFeed?.total || 0})</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {liveThreatFeed?.items && liveThreatFeed.items.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {liveThreatFeed.items.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => navigate(`/ioc-search?q=${encodeURIComponent(item.indicator_value)}`)}
+                className="bg-soc-card/70 hover:bg-soc-card border border-soc-border rounded-lg p-3 space-y-2 cursor-pointer transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold uppercase text-soc-accent bg-soc-accent/10 px-1.5 py-0.5 rounded">
+                    {item.ioc_type}
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-400">{item.provider}</span>
+                </div>
+                <div
+                  className="font-mono text-xs font-semibold text-white group-hover:text-soc-accent truncate transition-colors"
+                  title={item.indicator_value}
+                >
+                  {item.indicator_value}
+                </div>
+                <div className="text-[11px] text-slate-400 truncate" title={item.threat_category}>
+                  {item.threat_category}
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-soc-border/40 text-[10px] font-mono text-slate-500">
+                  <span className="capitalize">{item.severity}</span>
+                  <span className="flex items-center gap-0.5 text-soc-accent group-hover:underline">
+                    Investigate <ArrowRight className="w-2.5 h-2.5" />
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-4 text-center text-xs text-slate-500 font-mono">
+            Threat feed synchronized. Click Explore to inspect live indicators.
+          </div>
+        )}
       </div>
 
       {/* Main Bottom Grid: Recent Investigations & Recent IOCs */}

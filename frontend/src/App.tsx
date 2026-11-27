@@ -2,7 +2,6 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  Radio,
   ShieldAlert,
   BookmarkCheck,
   FileText,
@@ -17,6 +16,7 @@ import { Dashboard } from './pages/Dashboard';
 import { IOCInvestigation } from './pages/IOCInvestigation';
 import { Investigations } from './pages/Investigations';
 import { AIAnalyst } from './pages/AIAnalyst';
+import { ThreatIntelFeed } from './pages/ThreatIntelFeed';
 import { PlaceholderPage } from './pages/placeholders/PlaceholderPage';
 
 const queryClient = new QueryClient({
@@ -82,24 +82,12 @@ export const App: React.FC = () => {
               }
             />
 
-            {/* Designed Module Placeholders */}
+            {/* Threat Intelligence Feed */}
             <Route
               path="/threat-intel"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Threat Intelligence Feed Integration"
-                    moduleName="Module 4: Provider Integration & Aggregation"
-                    phase="Phase 2 Scheduled"
-                    icon={Radio}
-                    description="Independent feed adapter integration engine for VirusTotal API v3, AbuseIPDB, AlienVault OTX, URLhaus, urlscan.io, and CISA Known Exploited Vulnerabilities (KEV)."
-                    plannedFeatures={[
-                      'Asynchronous provider adapter interface with circuit breaker',
-                      'Rate-limit backoff and Redis-based cached reputation lookups',
-                      'Strict validation of external provider JSON payloads as untrusted data',
-                      'Configurable API secret key management isolated from client browsers',
-                    ]}
-                  />
+                  <ThreatIntelFeed />
                 </ProtectedRoute>
               }
             />

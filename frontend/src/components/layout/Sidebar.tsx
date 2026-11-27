@@ -46,8 +46,8 @@ const navSections: NavSection[] = [
   {
     title: 'Intelligence',
     items: [
-      { name: 'Threat Intel Feed', path: '/threat-intel', icon: Radio, phase2: true },
-      { name: 'AI Threat Analyst', path: '/ai-analyst', icon: Cpu, phase2: true },
+      { name: 'Threat Intel Feed', path: '/threat-intel', icon: Radio },
+      { name: 'AI Threat Analyst', path: '/ai-analyst', icon: Cpu },
       { name: 'Threat Watchlists', path: '/watchlists', icon: BookmarkCheck, phase2: true },
     ],
   },

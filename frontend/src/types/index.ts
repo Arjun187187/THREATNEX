@@ -186,4 +186,68 @@ export interface AIAnalysisRequest {
   ioc_type?: string | null;
 }
 
+export interface ThreatFeedItem {
+  id: string;
+  indicator_value: string;
+  ioc_type: IOCType | string;
+  provider: string;
+  source_feed?: string | null;
+  threat_category: string;
+  severity: IOCSeverity | string;
+  confidence: number;
+  description?: string | null;
+  tags: string[];
+  external_reference?: string | null;
+  first_seen?: string | null;
+  last_seen?: string | null;
+  raw_metadata?: Record<string, any> | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ThreatFeedListResponse {
+  items: ThreatFeedItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface FeedProviderStatus {
+  provider: string;
+  status: string;
+  last_synced_at?: string | null;
+  items_count: number;
+  last_error?: string | null;
+  attribution: string;
+  rate_limit_info?: string | null;
+}
+
+export interface FeedStatsResponse {
+  total_items: number;
+  by_severity: Record<string, number>;
+  by_type: Record<string, number>;
+  by_provider: Record<string, number>;
+  last_sync_time?: string | null;
+}
+
+export interface ProviderSyncResult {
+  provider: string;
+  status: string;
+  items_ingested: number;
+  items_updated: number;
+  error?: string | null;
+  duration_ms: number;
+}
+
+export interface FeedSyncResponse {
+  status: string;
+  message: string;
+  results: ProviderSyncResult[];
+  total_ingested: number;
+  total_updated: number;
+}
+
+
 
