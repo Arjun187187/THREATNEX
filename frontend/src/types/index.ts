@@ -66,3 +66,64 @@ export interface DashboardStats {
   ioc_by_type: Record<string, number>;
   investigations_by_priority: Record<string, number>;
 }
+
+export type ProviderStatusType =
+  | 'success'
+  | 'clean'
+  | 'not_found'
+  | 'unconfigured'
+  | 'unsupported'
+  | 'rate_limited'
+  | 'timeout'
+  | 'error';
+
+export interface ProviderResult {
+  provider: string;
+  supported: boolean;
+  status: ProviderStatusType;
+  message?: string | null;
+  attribution: string;
+  source_timestamp?: string | null;
+  malicious: number;
+  suspicious: number;
+  harmless: number;
+  undetected: number;
+  reputation_score?: number | null;
+  confidence_score?: number | null;
+  verdict: 'malicious' | 'suspicious' | 'clean' | 'unknown';
+  tags: string[];
+  evidence: Record<string, any>;
+}
+
+export interface IOCEnrichmentResponse {
+  value: string;
+  normalized_value: string;
+  ioc_type: IOCType;
+  is_valid: boolean;
+  queried_at: string;
+  overall_verdict: 'malicious' | 'suspicious' | 'clean' | 'unknown';
+  calculated_severity: IOCSeverity;
+  overall_confidence: number;
+  total_detections: number;
+  summary: string;
+  tags: string[];
+  providers: ProviderResult[];
+  saved_in_inventory: boolean;
+  indicator_id?: string | null;
+  investigation_record_id?: string | null;
+}
+
+export interface IOCInvestigationHistoryItem {
+  id: string;
+  indicator_value: string;
+  ioc_type: IOCType;
+  verdict: string;
+  severity: IOCSeverity;
+  confidence: number;
+  total_detections: number;
+  summary?: string | null;
+  user_id?: string | null;
+  indicator_id?: string | null;
+  created_at: string;
+}
+

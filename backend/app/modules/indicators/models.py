@@ -41,3 +41,22 @@ class Indicator(Base, UUIDMixin, TimestampMixin):
     __table_args__ = (
         Index("ix_indicators_type_value", "ioc_type", "value"),
     )
+
+
+class IOCInvestigationRecord(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "ioc_investigations"
+
+    indicator_value: Mapped[str] = mapped_column(String(500), index=True, nullable=False)
+    ioc_type: Mapped[IOCType] = mapped_column(SQLEnum(IOCType), index=True, nullable=False)
+    verdict: Mapped[str] = mapped_column(String(50), default="unknown", nullable=False)
+    severity: Mapped[IOCSeverity] = mapped_column(SQLEnum(IOCSeverity), default=IOCSeverity.UNKNOWN, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    total_detections: Mapped[int] = mapped_column(default=0, nullable=False)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    raw_results_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    indicator_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+
+    __table_args__ = (
+        Index("ix_ioc_inv_val_type", "indicator_value", "ioc_type"),
+    )

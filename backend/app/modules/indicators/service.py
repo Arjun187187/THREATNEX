@@ -48,24 +48,40 @@ async def get_or_create_indicator(db: AsyncSession, data: IndicatorCreate) -> In
         db.add(indicator)
         await db.commit()
         await db.refresh(indicator)
+    else:
+        # Update existing indicator with latest triage attributes
+        if data.severity != IOCSeverity.UNKNOWN:
+            indicator.severity = data.severity
+        if data.confidence > 0:
+            indicator.confidence = data.confidence
+        if data.description:
+            indicator.description = data.description
+        if data.tags:
+            indicator.tags = data.tags
+        await db.commit()
+        await db.refresh(indicator)
 
     return indicator
 
 
-async def search_indicators(db: AsyncSession, query: str, limit: int = 50) -> List[Indicator]:
-    """Searches indicators matching value, type, or tags."""
-    clean_q = f"%{query.strip()}%"
-    stmt = (
-        select(Indicator)
-        .where(
-            or_(
-                Indicator.value.ilike(clean_q),
-                Indicator.description.ilike(clean_q),
-                Indicator.tags.ilike(clean_q),
+async def search_indicators(db: AsyncSession, query: str = "", limit: int = 50) -> List[Indicator]:
+    """Searches indicators matching value, type, or tags. Returns latest indicators if query is empty."""
+    clean_val = (query or "").strip()
+    if not clean_val:
+        stmt = select(Indicator).order_by(Indicator.created_at.desc()).limit(limit)
+    else:
+        clean_q = f"%{clean_val}%"
+        stmt = (
+            select(Indicator)
+            .where(
+                or_(
+                    Indicator.value.ilike(clean_q),
+                    Indicator.description.ilike(clean_q),
+                    Indicator.tags.ilike(clean_q),
+                )
             )
+            .order_by(Indicator.created_at.desc())
+            .limit(limit)
         )
-        .order_by(Indicator.created_at.desc())
-        .limit(limit)
-    )
     result = await db.execute(stmt)
     return list(result.scalars().all())

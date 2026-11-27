@@ -4,9 +4,9 @@
  * from leaking to user-facing error banners.
  */
 
-export function formatApiError(err: any): string {
+export function formatApiError(err: any, fallbackMessage?: string): string {
   if (!err) {
-    return 'An unexpected error occurred. Please try again.';
+    return fallbackMessage || 'An unexpected error occurred. Please try again.';
   }
 
   // Network / Proxy / Connection failure (no HTTP response received)

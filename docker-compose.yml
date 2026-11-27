@@ -69,6 +69,10 @@ services:
       SECRET_KEY: ${PROD_SECRET_KEY:-threatnex-prod-runtime-master-token-encryption-entropy-64chars}
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       REFRESH_TOKEN_EXPIRE_DAYS: 7
+      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
+      ALIENVAULT_OTX_API_KEY: ${ALIENVAULT_OTX_API_KEY:-${ALIENVAULT_OTX_KEY:-}}
+      URLHAUS_AUTH_KEY: ${URLHAUS_AUTH_KEY:-}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8001}:8000"
     networks:

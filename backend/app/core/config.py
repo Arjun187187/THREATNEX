@@ -45,6 +45,14 @@ class Settings(BaseSettings):
     REDIS_CONNECT_TIMEOUT: float = 2.0
     REDIS_SOCKET_TIMEOUT: float = 2.0
 
+    # Threat Intelligence Integration Providers
+    VIRUSTOTAL_API_KEY: Optional[str] = None
+    ABUSEIPDB_API_KEY: Optional[str] = None
+    ALIENVAULT_OTX_API_KEY: Optional[str] = None
+    URLHAUS_AUTH_KEY: Optional[str] = None
+    THREAT_INTEL_TIMEOUT: float = 8.0
+    THREAT_INTEL_CACHE_TTL: int = 3600  # 1 hour cache TTL in Redis for reputation results
+
     @field_validator("SECRET_KEY")
     @classmethod
     def validate_secret_key(cls, v: str, info) -> str:
