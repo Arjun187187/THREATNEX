@@ -48,11 +48,22 @@ async def register_user(db: AsyncSession, user_in: UserRegister) -> User:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is already registered")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username is already taken")
 
-    count_stmt = select(User)
-    total_users = len((await db.execute(count_stmt)).scalars().all())
+    # Check whether any non-test Admin account already exists.
+    # If no human Admin exists (e.g. fresh database or only automated test 'analyst_%' / 'test_%' accounts),
+    # the first registered operator receives both Admin and Analyst roles.
+    admin_stmt = (
+        select(User)
+        .join(User.roles)
+        .where(
+            Role.name == "Admin",
+            ~User.username.like("analyst_%"),
+            ~User.username.like("test_%"),
+        )
+    )
+    has_human_admin = (await db.execute(admin_stmt)).scalar_one_or_none() is not None
 
     roles_dict = await get_or_create_default_roles(db)
-    assigned_roles = [roles_dict["Admin"], roles_dict["Analyst"]] if total_users == 0 else [roles_dict["Analyst"]]
+    assigned_roles = [roles_dict["Admin"], roles_dict["Analyst"]] if not has_human_admin else [roles_dict["Analyst"]]
 
     new_user = User(
         email=user_in.email,

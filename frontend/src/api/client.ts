@@ -1,24 +1,20 @@
 import axios from 'axios';
 
-// Resolve base URL dynamically:
-// In Docker production with Nginx reverse proxy, window.location.origin + '/api/v1' or '/api/v1' works natively.
-// In dev environments, fallback to VITE_API_URL or relative /api/v1 or host ports.
+// Resolve base URL:
+// Using relative '/api/v1' ensures all requests go through the same-origin reverse proxy
+// (Nginx in Docker container or Vite dev proxy in local development),
+// eliminating host port conflicts (such as Splunk on port 8000) and cross-origin preflight complexity.
 const getBaseUrl = (): string => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  if (typeof window !== 'undefined') {
-    // If frontend is served by Nginx on port 8080/5173 with /api/ reverse proxy
-    if (window.location.port === '5173' || window.location.port === '8080' || !window.location.port) {
-      return '/api/v1';
-    }
-  }
-  return 'http://localhost:8000/api/v1';
+  return '/api/v1';
 };
 
 export const apiClient = axios.create({
   baseURL: getBaseUrl(),
   withCredentials: true, // Enables browser to send and receive HttpOnly cookies
+  timeout: 15000, // 15-second timeout to prevent indefinite hanging
   headers: {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest', // Anti-CSRF header protection

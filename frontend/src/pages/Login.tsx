@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { ShieldAlert, Lock, User, AlertCircle, ArrowRight } from 'lucide-react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { ShieldAlert, Lock, User, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { AuthTokens, User as UserType } from '../types';
+import { formatApiError } from '../utils/errors';
 
 export const Login: React.FC = () => {
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
@@ -12,6 +13,9 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const isRegisteredSuccess = new URLSearchParams(location.search).get('registered') === '1';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,10 +33,7 @@ export const Login: React.FC = () => {
       login(userRes.data);
       navigate('/');
     } catch (err: any) {
-      setError(
-        err.response?.data?.detail ||
-          'Authentication rejected. Verify credentials or check rate-limit backoff.'
-      );
+      setError(formatApiError(err));
     } finally {
       setLoading(false);
     }
@@ -51,6 +52,16 @@ export const Login: React.FC = () => {
             Enterprise Cyber Threat Intelligence Command
           </p>
         </div>
+
+        {/* Registration Success Banner */}
+        {isRegisteredSuccess && (
+          <div className="p-3.5 bg-emerald-950/40 border border-emerald-800/80 rounded-xl flex items-start gap-2.5 text-xs text-emerald-300 animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+            <span className="font-sans leading-relaxed">
+              Operator account successfully enrolled. Please authenticate with your credentials below.
+            </span>
+          </div>
+        )}
 
         {/* Security Notice Banner */}
         <div className="px-3.5 py-2.5 rounded-lg bg-soc-card border border-soc-borderSubtle flex items-center justify-between text-[11px] font-mono text-slate-400">

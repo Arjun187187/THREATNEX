@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ShieldCheck, Lock, User, Mail, AlertCircle, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Lock, User, Mail, AlertCircle, ArrowRight, Info } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { formatApiError } from '../utils/errors';
 
 export const Register: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -12,12 +13,28 @@ export const Register: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const USERNAME_REGEX = /^[a-zA-Z0-9_-]+$/;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
+    const trimmedUser = username.trim();
+    const trimmedEmail = email.trim();
+
+    // Client-side validation matching backend Pydantic schema
+    if (trimmedUser.length < 3 || trimmedUser.length > 50) {
+      setError('Username must be between 3 and 50 characters.');
+      return;
+    }
+
+    if (!USERNAME_REGEX.test(trimmedUser)) {
+      setError('Username must only contain letters, numbers, underscores, or hyphens (no spaces or special characters).');
+      return;
+    }
+
     if (password.length < 12) {
-      setError('Password must contain at least 12 characters according to SOC policy.');
+      setError('Passphrase must contain at least 12 characters according to SOC policy.');
       return;
     }
 
@@ -25,15 +42,16 @@ export const Register: React.FC = () => {
 
     try {
       await apiClient.post('/auth/register', {
-        username: username.trim(),
-        email: email.trim(),
+        username: trimmedUser,
+        email: trimmedEmail,
         full_name: fullName.trim() || null,
         password,
       });
 
-      navigate('/login');
+      // Navigate to login with success query parameter
+      navigate('/login?registered=1');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to register operator credentials.');
+      setError(formatApiError(err));
     } finally {
       setLoading(false);
     }
@@ -53,6 +71,12 @@ export const Register: React.FC = () => {
           </p>
         </div>
 
+        {/* Security Role Notice */}
+        <div className="p-3 rounded-lg bg-soc-card border border-soc-borderSubtle flex items-start gap-2.5 text-[11px] font-mono text-slate-400">
+          <Info className="w-4 h-4 text-soc-accent shrink-0 mt-0.5" />
+          <span>The first enrolled operator account is automatically provisioned with the <strong>Admin</strong> role.</span>
+        </div>
+
         {/* Error Alert */}
         {error && (
           <div className="p-3.5 bg-rose-950/40 border border-rose-800/80 rounded-xl flex items-start gap-2.5 text-xs text-rose-300 animate-in fade-in">
@@ -64,7 +88,10 @@ export const Register: React.FC = () => {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
           <div>
-            <label className="block uppercase text-slate-400 mb-1.5 font-semibold">Username *</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block uppercase text-slate-400 font-semibold">Username *</label>
+              <span className="text-[10px] text-slate-500">3-50 chars (alphanumeric, _ -)</span>
+            </div>
             <div className="relative">
               <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
               <input
@@ -132,7 +159,7 @@ export const Register: React.FC = () => {
               <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
             ) : (
               <>
-                <span>Enroll Credentials</span>
+                <span>Complete Registration</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
@@ -143,7 +170,7 @@ export const Register: React.FC = () => {
         <div className="pt-4 border-t border-soc-border flex items-center justify-between text-[11px] font-mono text-slate-500">
           <span>Already registered?</span>
           <Link to="/login" className="text-soc-accent hover:underline">
-            Authenticate Session
+            Log in to SOC
           </Link>
         </div>
       </div>
