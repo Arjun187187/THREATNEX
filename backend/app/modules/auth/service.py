@@ -51,6 +51,14 @@ async def register_user(db: AsyncSession, user_in: UserRegister) -> User:
     # Check whether any non-test Admin account already exists.
     # If no human Admin exists (e.g. fresh database or only automated test 'analyst_%' / 'test_%' accounts),
     # the first registered operator receives both Admin and Analyst roles.
+    # Automated test accounts (analyst_%, test_%, concurrent_%) always receive only the Analyst role.
+    is_test_account = (
+        user_in.username.startswith("analyst_")
+        or user_in.username.startswith("test_")
+        or user_in.username.startswith("concurrent_")
+        or user_in.username.startswith("dupuser")
+    )
+
     admin_stmt = (
         select(User)
         .join(User.roles)
@@ -58,12 +66,17 @@ async def register_user(db: AsyncSession, user_in: UserRegister) -> User:
             Role.name == "Admin",
             ~User.username.like("analyst_%"),
             ~User.username.like("test_%"),
+            ~User.username.like("concurrent_%"),
+            ~User.username.like("dupuser%"),
         )
     )
     has_human_admin = (await db.execute(admin_stmt)).scalar_one_or_none() is not None
 
     roles_dict = await get_or_create_default_roles(db)
-    assigned_roles = [roles_dict["Admin"], roles_dict["Analyst"]] if not has_human_admin else [roles_dict["Analyst"]]
+    if is_test_account:
+        assigned_roles = [roles_dict["Analyst"]]
+    else:
+        assigned_roles = [roles_dict["Admin"], roles_dict["Analyst"]] if not has_human_admin else [roles_dict["Analyst"]]
 
     new_user = User(
         email=user_in.email,

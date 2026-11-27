@@ -249,5 +249,172 @@ export interface FeedSyncResponse {
   total_updated: number;
 }
 
+// ========================
+// 1. WATCHLISTS
+// ========================
+export interface WatchlistIndicator {
+  id: string;
+  watchlist_id: string;
+  indicator_value: string;
+  ioc_type: string;
+  severity: string;
+  confidence: number;
+  notes?: string | null;
+  status: string;
+  expires_at?: string | null;
+  matches_count: number;
+  last_matched_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Watchlist {
+  id: string;
+  name: string;
+  description?: string | null;
+  category: string;
+  severity: string;
+  owner_id?: string | null;
+  is_active: boolean;
+  indicators_count: number;
+  total_matches: number;
+  indicators?: WatchlistIndicator[];
+  created_at: string;
+  updated_at: string;
+}
+
+// ========================
+// 2. SECURITY ALERTS
+// ========================
+export interface SecurityAlert {
+  id: string;
+  title: string;
+  description?: string | null;
+  indicator_value: string;
+  ioc_type: string;
+  severity: string;
+  status: 'open' | 'acknowledged' | 'resolved' | 'escalated' | string;
+  source_rule: string;
+  confidence: number;
+  assigned_to?: string | null;
+  case_id?: string | null;
+  raw_evidence?: Record<string, any> | null;
+  acknowledged_by?: string | null;
+  acknowledged_at?: string | null;
+  resolved_by?: string | null;
+  resolved_at?: string | null;
+  resolution_notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AlertListResponse {
+  items: SecurityAlert[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface AlertStatsResponse {
+  total_alerts: number;
+  by_status: Record<string, number>;
+  by_severity: Record<string, number>;
+}
+
+// ========================
+// 3. THREAT REPORTS
+// ========================
+export interface ThreatReport {
+  id: string;
+  title: string;
+  report_type: string;
+  reference_id?: string | null;
+  reference_title?: string | null;
+  author_id?: string | null;
+  executive_summary: string;
+  content_markdown: string;
+  content_json?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReportListItem {
+  id: string;
+  title: string;
+  report_type: string;
+  reference_id?: string | null;
+  reference_title?: string | null;
+  author_id?: string | null;
+  executive_summary: string;
+  created_at: string;
+}
+
+export interface ReportListResponse {
+  items: ReportListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+// ========================
+// 4. AUDIT LOGS
+// ========================
+export interface AuditLogItem {
+  id: string;
+  action: string;
+  resource_type: string;
+  resource_id?: string | null;
+  user_id?: string | null;
+  username?: string | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  details?: string | null;
+  created_at: string;
+}
+
+export interface AuditLogListResponse {
+  items: AuditLogItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+// ========================
+// 5. SOC SETTINGS
+// ========================
+export interface ProviderConfigurationStatus {
+  provider_name: string;
+  is_configured: boolean;
+  status_label: string;
+  quota_tier: string;
+}
+
+export interface SOCSettingsResponse {
+  scoring_weights: {
+    virustotal_weight: number;
+    abuseipdb_weight: number;
+    alienvault_weight: number;
+    urlhaus_weight: number;
+  };
+  alert_thresholds: {
+    min_confidence_to_alert: number;
+    auto_escalate_critical: boolean;
+    deduplication_window_hours: number;
+    require_analyst_resolution_notes: boolean;
+  };
+  retention_policies: {
+    audit_log_retention_days: number;
+    feed_retention_days: number;
+    closed_investigation_retention_days: number;
+  };
+  provider_statuses: Record<string, ProviderConfigurationStatus>;
+  last_updated: string;
+  updated_by?: string | null;
+}
+
+
 
 

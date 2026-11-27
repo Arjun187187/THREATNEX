@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from app.core.config import settings
 from app.core.database import Base, get_db
 from app.main import app
+from app.core import redis as app_redis
 
 # Use in-memory SQLite for high-speed isolated test execution
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -26,11 +27,23 @@ TestSessionLocal = async_sessionmaker(
 )
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+@pytest_asyncio.fixture(autouse=True)
+async def clean_redis_and_loop():
+    """Ensure Redis connection pool resets per test and test rate limits are clean."""
+    app_redis._redis_pool = None
+    r = await app_redis.get_redis_client()
+    if r:
+        try:
+            await r.flushdb()
+        except Exception:
+            pass
+    yield
+    if app_redis._redis_pool is not None:
+        try:
+            await app_redis._redis_pool.close()
+        except Exception:
+            pass
+        app_redis._redis_pool = None
 
 
 @pytest_asyncio.fixture(scope="function")

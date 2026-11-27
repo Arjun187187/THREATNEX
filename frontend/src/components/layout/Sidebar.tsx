@@ -48,16 +48,16 @@ const navSections: NavSection[] = [
     items: [
       { name: 'Threat Intel Feed', path: '/threat-intel', icon: Radio },
       { name: 'AI Threat Analyst', path: '/ai-analyst', icon: Cpu },
-      { name: 'Threat Watchlists', path: '/watchlists', icon: BookmarkCheck, phase2: true },
+      { name: 'Threat Watchlists', path: '/watchlists', icon: BookmarkCheck },
     ],
   },
   {
     title: 'Management',
     items: [
-      { name: 'Security Alerts', path: '/alerts', icon: AlertTriangle, phase2: true },
-      { name: 'Threat Reports', path: '/reports', icon: FileText, phase2: true },
-      { name: 'Audit Trail', path: '/audit-logs', icon: History, phase2: true },
-      { name: 'SOC Policies', path: '/settings', icon: Sliders, phase2: true },
+      { name: 'Security Alerts', path: '/alerts', icon: AlertTriangle },
+      { name: 'Threat Reports', path: '/reports', icon: FileText },
+      { name: 'Audit Trail', path: '/audit-logs', icon: History },
+      { name: 'SOC Policies', path: '/settings', icon: Sliders },
     ],
   },
 ];

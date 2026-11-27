@@ -234,29 +234,31 @@ async def test_production_redis_fail_closed():
     from app.core.config import settings
     from app.core.token_revocation import revoke_token, is_token_revoked
     from app.core.ratelimit import check_rate_limit
-    from unittest.mock import MagicMock
+    from unittest.mock import MagicMock, patch
 
     original_env = settings.ENVIRONMENT
     try:
         settings.ENVIRONMENT = "production"
 
-        # Revoke token must fail closed with 503
-        with pytest.raises(HTTPException) as exc1:
-            await revoke_token("test-token-jwt-value")
-        assert exc1.value.status_code == 503
+        with patch("app.core.token_revocation.get_redis_client", return_value=None), \
+             patch("app.core.ratelimit.get_redis_client", return_value=None):
+            # Revoke token must fail closed with 503
+            with pytest.raises(HTTPException) as exc1:
+                await revoke_token("test-token-jwt-value")
+            assert exc1.value.status_code == 503
 
-        # Is token revoked must fail closed with 503
-        with pytest.raises(HTTPException) as exc2:
-            await is_token_revoked("test-token-jwt-value")
-        assert exc2.value.status_code == 503
+            # Is token revoked must fail closed with 503
+            with pytest.raises(HTTPException) as exc2:
+                await is_token_revoked("test-token-jwt-value")
+            assert exc2.value.status_code == 503
 
-        # Rate limit must fail closed with 503
-        mock_req = MagicMock()
-        mock_req.client.host = "127.0.0.1"
-        mock_req.headers.get.return_value = None
-        with pytest.raises(HTTPException) as exc3:
-            await check_rate_limit(mock_req)
-        assert exc3.value.status_code == 503
+            # Rate limit must fail closed with 503
+            mock_req = MagicMock()
+            mock_req.client.host = "127.0.0.1"
+            mock_req.headers.get.return_value = None
+            with pytest.raises(HTTPException) as exc3:
+                await check_rate_limit(mock_req)
+            assert exc3.value.status_code == 503
 
     finally:
         settings.ENVIRONMENT = original_env

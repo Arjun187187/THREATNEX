@@ -13,6 +13,10 @@ from app.modules.dashboard.router import router as dashboard_router
 from app.modules.audit.router import router as audit_router
 from app.modules.ai_analyst.router import router as ai_analyst_router
 from app.modules.threat_intel.router import router as threat_intel_router
+from app.modules.watchlists.router import router as watchlists_router
+from app.modules.alerts.router import router as alerts_router
+from app.modules.reports.router import router as reports_router
+from app.modules.settings.router import router as settings_router
 
 
 @asynccontextmanager
@@ -122,3 +126,7 @@ app.include_router(dashboard_router, prefix=api_prefix)
 app.include_router(audit_router, prefix=api_prefix)
 app.include_router(ai_analyst_router, prefix=api_prefix)
 app.include_router(threat_intel_router, prefix=api_prefix)
+app.include_router(watchlists_router, prefix=api_prefix)
+app.include_router(alerts_router, prefix=api_prefix)
+app.include_router(reports_router, prefix=api_prefix)
+app.include_router(settings_router, prefix=api_prefix)

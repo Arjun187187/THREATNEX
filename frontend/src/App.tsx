@@ -1,13 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import {
-  ShieldAlert,
-  BookmarkCheck,
-  FileText,
-  Sliders,
-  History,
-} from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { Login } from './pages/Login';
@@ -17,7 +10,11 @@ import { IOCInvestigation } from './pages/IOCInvestigation';
 import { Investigations } from './pages/Investigations';
 import { AIAnalyst } from './pages/AIAnalyst';
 import { ThreatIntelFeed } from './pages/ThreatIntelFeed';
-import { PlaceholderPage } from './pages/placeholders/PlaceholderPage';
+import { Watchlists } from './pages/Watchlists';
+import { Alerts } from './pages/Alerts';
+import { Reports } from './pages/Reports';
+import { AuditLogs } from './pages/AuditLogs';
+import { Settings } from './pages/Settings';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,7 +53,7 @@ export const App: React.FC = () => {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
 
-            {/* Core Protected Routes */}
+            {/* Core Operations Routes */}
             <Route
               path="/"
               element={
@@ -82,7 +79,7 @@ export const App: React.FC = () => {
               }
             />
 
-            {/* Threat Intelligence Feed */}
+            {/* Intelligence Routes */}
             <Route
               path="/threat-intel"
               element={
@@ -100,42 +97,20 @@ export const App: React.FC = () => {
               }
             />
             <Route
-              path="/alerts"
-              element={
-                <ProtectedRoute>
-                  <PlaceholderPage
-                    title="SOC Alert Management"
-                    moduleName="Module 11: Alert Ingestion & Correlation"
-                    phase="Phase 2 Scheduled"
-                    icon={ShieldAlert}
-                    description="Real-time alert aggregation engine designed to ingest detections, deduplicate noise, correlate multi-source events, and escalate alerts into formal investigations."
-                    plannedFeatures={[
-                      'Configurable alert severity threshold rules',
-                      'Automatic correlation with recorded IOC inventory',
-                      'One-click alert escalation into formal investigation cases',
-                      'Webhook and SIEM connector ingestion points',
-                    ]}
-                  />
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/watchlists"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Targeted Threat Watchlists"
-                    moduleName="Module 13: Watchlist Monitoring Engine"
-                    phase="Phase 2 Scheduled"
-                    icon={BookmarkCheck}
-                    description="High-priority indicator tracking service for continuous automated monitoring of VIP assets, critical infrastructure endpoints, and active APT campaigns."
-                    plannedFeatures={[
-                      'Dynamic watchlist collections (Campaign, Actor, Infrastructure)',
-                      'Automated notification triggers upon watchlist indicator hits',
-                      'Indicator expiration, lifecycle status, and retirement rules',
-                      'Bulk STIX/CSV import and export capabilities',
-                    ]}
-                  />
+                  <Watchlists />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Management & Governance Routes */}
+            <Route
+              path="/alerts"
+              element={
+                <ProtectedRoute>
+                  <Alerts />
                 </ProtectedRoute>
               }
             />
@@ -143,19 +118,7 @@ export const App: React.FC = () => {
               path="/reports"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Threat Intelligence Reporting"
-                    moduleName="Module 12: Executive & Technical Intelligence Reports"
-                    phase="Phase 2 Scheduled"
-                    icon={FileText}
-                    description="Comprehensive reporting engine generating formal incident post-mortems, threat briefing documents, executive summaries, and STIX 2.1 bundles."
-                    plannedFeatures={[
-                      'Export to PDF, Markdown, and machine-readable STIX 2.1 JSON',
-                      'Executive summary cards with verified risk score breakdowns',
-                      'Audit-compliant case timeline generation with analyst notes',
-                      'Cryptographic report signing for evidentiary integrity',
-                    ]}
-                  />
+                  <Reports />
                 </ProtectedRoute>
               }
             />
@@ -163,19 +126,7 @@ export const App: React.FC = () => {
               path="/audit-logs"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="SOC Compliance Audit Trail"
-                    moduleName="Module 14: System & Security Audit"
-                    phase="Phase 2 Scheduled"
-                    icon={History}
-                    description="Immutable audit trail capturing all user authentication events, investigation updates, IOC creations, and administrative actions for SOC2 and ISO 27001 compliance."
-                    plannedFeatures={[
-                      'Admin RBAC protected log viewing interface',
-                      'Detailed IP address, user-agent, and actor tracking',
-                      'Tamper-evident log record storage',
-                      'Export capability for external SIEM retention',
-                    ]}
-                  />
+                  <AuditLogs />
                 </ProtectedRoute>
               }
             />
@@ -183,19 +134,7 @@ export const App: React.FC = () => {
               path="/settings"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage
-                    title="Platform Settings & SOC Policies"
-                    moduleName="System Configuration"
-                    phase="Phase 2 Scheduled"
-                    icon={Sliders}
-                    description="Administrative configuration for role-based access control, provider API key management, risk score weighting matrices, and system environment variables."
-                    plannedFeatures={[
-                      'Role & permission assignment (Admin, Lead Analyst, Tier 1/2/3)',
-                      'Encrypted external threat provider credential storage',
-                      'Configurable threat scoring weight sliders (Detection, Freshness, Confidence)',
-                      'Session security policies and token expiration settings',
-                    ]}
-                  />
+                  <Settings />
                 </ProtectedRoute>
               }
             />
